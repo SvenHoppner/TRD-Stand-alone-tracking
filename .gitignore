@@ -3,3 +3,7 @@
 *.so
 **/ST_out/
 testing_stuff.cc
+.vscode/
+Ali_make_tracklets_from*
+AnalysisResults.root
+*_tmp_*

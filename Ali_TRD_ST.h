@@ -20,7 +20,12 @@ private:
 public:
     Ali_MC_particle() :
         TV3_particle_vertex(),TLV_particle(),PDGcode(0),index_particle(0),index_mother(0),N_daughters(0),arr_index_daughters()
-    {}
+    {
+        for(Int_t i = 0; i<5; i++)
+        {
+            arr_index_daughters[i] = -1;
+        }
+    }
         ~Ali_MC_particle(){}
 
         void       set_TV3_particle_vertex(TVector3 TV3_particle_vertex_in)           { TV3_particle_vertex = TV3_particle_vertex_in;    }

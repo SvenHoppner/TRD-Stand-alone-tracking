@@ -106,10 +106,10 @@ void Macro_TRD_tracking(TString input_list = "run0_test.txt", Int_t event_plot =
     Int_t TF_tracker                = 0; // Tensorflow tracker
 
     Int_t graphics                  = 1; // 0 = no 3D graphics, 1 = 3D graphics (#define USEEVE in TRD_ST_Analyze_tracklets needs to be defined too)
-    Int_t draw_tracklets_TPC_match  = 1; // Draw tracklets matched with TPC tracks
-    Int_t draw_all_TPC_tracks       = 0; // Draw all TPC tracks
+    Int_t draw_tracklets_TPC_match  = 0; // Draw tracklets matched with TPC tracks
+    Int_t draw_all_TPC_tracks       = 1; // Draw all TPC tracks
     Int_t draw_all_TRD_tracks       = 0; // Draw all TRD tracks ->
-    Int_t draw_all_tracklets        = 1; // Draw all TRD tracklets
+    Int_t draw_all_tracklets        = 0; // Draw all TRD tracklets
     Int_t draw_found_tracklets      = 1; // Draws tracklets found by tracker
     Int_t draw_matched_TPC_track    = 0; // Draw TPC to TRD matched TPC track
     Int_t draw_matched_TRD_track    = 0; // Draw TPC to TRD matched Kalman/TF track
@@ -121,6 +121,7 @@ void Macro_TRD_tracking(TString input_list = "run0_test.txt", Int_t event_plot =
     Int_t is_MC_event               = 1;
     Int_t draw_MC_tracks            = 1; // Draw Monte Carlo event
     Int_t draw_TRD_digits           = 0; // Draw TRD digits (old versions don't have the tree)
+    Int_t bool_make_invariant_mass_hist_up_to_layer = 0; //calculate invariant mass of S particle up to generation <Int_t> and draws a histogram
 
     //------------------------------------
 
@@ -181,7 +182,7 @@ void Macro_TRD_tracking(TString input_list = "run0_test.txt", Int_t event_plot =
 
 
         if(graphics) TRD_ST_Analyze ->Draw_event(event,graphics,draw_all_TPC_tracks,draw_all_tracklets,track_path,draw_TRD_digits);  // ->draws TPC tracks
-        if(is_MC_event) TRD_ST_Analyze ->Scan_MC_Event(graphics);
+        if(is_MC_event) TRD_ST_Analyze ->Scan_MC_Event(graphics,bool_make_invariant_mass_hist_up_to_layer);
         if(graphics && draw_MC_tracks) TRD_ST_Analyze ->Draw_MC_event(event,graphics);
         //cout<<TRD_ST_Analyze->Tracklets[2]->get_TRD_index()<<endl;
         if(graphics && animate_beams) TRD_ST_Analyze ->Animate_beams(beam_path);
@@ -238,6 +239,7 @@ void Macro_TRD_tracking(TString input_list = "run0_test.txt", Int_t event_plot =
     if(calibrate_vD) TRD_ST_Analyze ->Draw_n_Save_Calibration(output_dir,out_file_name_calib);
 
     if(calibrate_gain) TRD_ST_Analyze ->Draw_Save_Gain_calib();
+    if(bool_make_invariant_mass_hist_up_to_layer) TRD_ST_Analyze ->Draw_Inv_Mass_histogram();
     TRD_ST_Analyze ->Write();
 
 }

@@ -190,7 +190,11 @@ Ali_TRD_ST_Analyze::Ali_TRD_ST_Analyze(TString out_dir, TString out_file_name, I
         TEveP_beamB = new TEvePointSet();
     }
 #endif
-
+    if(1)
+        h1D_invariant_mass_S = new TH1D("h1D_invariant_mass_S", "h1D_invariant_mass_S", 500, 0, 9);
+        h1D_invariant_mass_K = new TH1D("h1D_invariant_mass_K", "h1D_invariant_mass_K", 500, 0, 9);
+        h1D_invariant_mass_L = new TH1D("h1D_invariant_mass_L", "h1D_invariant_mass_L", 500, 0, 9);
+        
     th1d_TRD_layer_radii = new TH1D("th1d_TRD_layer_radii","th1d_TRD_layer_radii",900,250,400.0);
     vec_th1d_TRD_layer_radii_det.resize(540);
     for(Int_t TRD_detector = 0; TRD_detector < 540; TRD_detector++)
@@ -3182,6 +3186,9 @@ Int_t Ali_TRD_ST_Analyze::Loop_event(Long64_t i_event, Int_t graphics)
         //gEve ->AddElement(TEveP_primary_vertex);
     }
 #endif
+
+
+    index_particle_to_track_number.clear();
     //--------------------------------------------------
 
     //printf("Event: %lld, TPC tracks: %d, TRD tracklets: %d \n",i_event,NumTracks,NumTracklets);
@@ -3189,6 +3196,7 @@ Int_t Ali_TRD_ST_Analyze::Loop_event(Long64_t i_event, Int_t graphics)
 
     //--------------------------------------------------
     // TPC track loop
+    /*
     for(Int_t i_track = 0; i_track < NumTracks; i_track++)
     {
         TRD_ST_TPC_Track = TRD_ST_Event ->getTrack(i_track);
@@ -3215,7 +3223,7 @@ Int_t Ali_TRD_ST_Analyze::Loop_event(Long64_t i_event, Int_t graphics)
         Float_t pT_track        = TLV_part.Pt();
         Float_t theta_track     = TLV_part.Theta();
         Float_t phi_track       = TLV_part.Phi();
-    }
+    }*/
     //--------------------------------------------------
 
 
@@ -3492,9 +3500,8 @@ void Ali_TRD_ST_Analyze::Draw_MC_track(Int_t i_track, Int_t color, Double_t line
 //----------------------------------------------------------------------------------------
 
 
-
 //----------------------------------------------------------------------------------------
-void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics)
+void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant_mass_hist_up_to_layer)
 {
     // Scan Monte Carlo event for interesting topology
     //printf("Ali_TRD_ST_Analyze::Scan_MC_Event \n");
@@ -3502,10 +3509,32 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics)
     Int_t arr_index_daughters_pi0[5]   = {-1};
     Int_t arr_index_daughters_gamma[5] = {-1};
     Int_t i_MC_draw_track = 0;
+    vector<vector<Int_t>> vec_indices_per_generation;
 
+    vector<vector<TLorentzVector>> vec_inv_masses_per_generation;
+
+    //initialize invariant mass histogram up to a certain generation
+    if(bool_make_invariant_mass_hist_up_to_layer)
+    { 
+        vec_inv_masses_per_generation.resize(bool_make_invariant_mass_hist_up_to_layer+1);
+        vec_indices_per_generation.resize(bool_make_invariant_mass_hist_up_to_layer+1);
+        vec_indices_per_generation[0].push_back(-1);
+        vec_inv_masses_per_generation[0].push_back(TLorentzVector());
+
+    }
     //Ali_MC_particle*      TRD_MC_Track_pi0;
     //Ali_MC_particle*      TRD_MC_Track_gammas[2];
     //Ali_MC_particle*      TRD_MC_Track_electrons[4];
+
+    //map of pdg codes corresponding to their name
+    std::map<Int_t, std::string> PDG_codes =
+    {{11,"e-"},{-11,"e+"},{13,"mu-"},{-13,"mu+"},{22,"gamma"},{111,"pi0"},{113,"pi0"},{130,"K0_l"},{211,"pi+"},{-211,"pi-"},{221,"eta"},{223,"omega"},
+    {310,"K0_s"},{321,"K+"},{-321,"K-"},{331,"eta'"},{-331,"anti-eta'"},{2112,"neutron"},{-2112,"anti-neutron"},{2212,"proton"},{-2212,"anti-proton"},
+    {3112,"Sigma-"},{-3112,"anti-Sigma-"},{-3122,"anti-Lambda"},{3122,"Lambda"},{3222,"Sigma+"},{3212,"Sigma0"},{-3212,"anti-Sigma0"}};
+
+    //map of PDG to particle masses 
+    std::map<Int_t, Double_t> PDG_masses = {{2112,0.9395},{-2112,0.9395}};
+    
 
     Int_t N_pi0_found = 0;
     for(Int_t i_track_A = 0; i_track_A < NumTracks; i_track_A++)
@@ -3518,23 +3547,42 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics)
         Int_t          MC_index_mother        = TRD_MC_Track_pi0 ->get_index_mother();
         Int_t          MC_index_particle      = TRD_MC_Track_pi0 ->get_index_particle();
         Int_t          MC_N_daughters         = TRD_MC_Track_pi0 ->get_N_daughters();
-
-        std::map<int, std::string> DPG_codes =
-        {{11,"e-"},{-11,"e+"},{13,"mu-"},{-13,"mu+"},{22,"gamma"},{111,"pi0"},{113,"pi0"},{130,"K0_l"},{211,"pi+"},{-211,"pi-"},{221,"eta"},{223,"omega"},
-        {310,"K0_s"},{321,"K+"},{-321,"K-"},{331,"eta'"},{-331,"anti-eta'"},{2112,"neutron"},{-2112,"anti-neutron"},{2212,"proton"},{-2212,"anti-proton"},
-        {3112,"Sigma-"},{-3112,"anti-Sigma-"},{-3122,"anti-Lambda"},{3122,"Lambda"},{3222,"Sigma+"},{3212,"Sigma0"},{-3212,"anti-Sigma0"}};
-
+        index_particle_to_track_number.insert(std::pair<int, int> (MC_index_particle, i_track_A));
         if(i_track_A == 0) printf("new MC_event\n----------------------------------------\n");
-        //std::string particle = DPG_codes[MC_PDG_code];
-        //printf(particle);
-        //if(DPG_codes[MC_PDG_code]=="")
-        printf("MC_track %d with PDG number %d, index %d, partice: %s, mother id %d, vertex: (%4.2f,%4.2f,%4.2f), p: %4.3f\n", i_track_A, MC_PDG_code,MC_index_particle, DPG_codes[MC_PDG_code].c_str(),MC_index_mother,TV3_MC_particle_vertex.X(),TV3_MC_particle_vertex.Y(),TV3_MC_particle_vertex.Z(),TLV_MC_particle.P());
-      /*  if (MC_index_mother=! -1){
-          printf("mother particle: %s DPG_codes[(TRD_ST_Event ->getMCparticle(MC_index_mother)) ->get_PDGcode()].c_str());
 
-        }*/
+        printf("MC_track %d with PDG number %d, index %d, partice: %s, mother id %d, vertex: (%4.2f,%4.2f,%4.2f), p: %4.3f\n", i_track_A, MC_PDG_code,MC_index_particle, PDG_codes[MC_PDG_code].c_str(),MC_index_mother,TV3_MC_particle_vertex.X(),TV3_MC_particle_vertex.Y(),TV3_MC_particle_vertex.Z(),TLV_MC_particle.P());
 
+        //search for mother particle index in vec_indices_per_generation 
+        //if it is in there and the mother is not stable
+        if(bool_make_invariant_mass_hist_up_to_layer)
+        { 
+            Int_t Mother_PDG_code=0;
+            if (MC_index_mother>=0)
+                Mother_PDG_code = TRD_ST_Event ->getMCparticle(index_particle_to_track_number[MC_index_mother])->get_PDGcode();
 
+            if(!(TMath::Abs(Mother_PDG_code) == 211 || TMath::Abs(Mother_PDG_code) == 2212 || TMath::Abs(Mother_PDG_code) == 321))
+            {
+                for (auto const &indVector : vec_indices_per_generation) {
+                    auto it = std::find(std::begin(indVector), std::end(indVector), MC_index_mother);
+                    if (it != std::end(indVector)) {
+                        Int_t pos_l_vec = it - std::begin(indVector);
+                        Int_t pos_index = &indVector - &vec_indices_per_generation[0] + 1;
+                        if(pos_index > bool_make_invariant_mass_hist_up_to_layer)
+                            break;
+
+                        printf("pos_index %d, pos_l_vec %d, index %d \n",pos_index,pos_l_vec, MC_index_particle);    
+                        vec_indices_per_generation[pos_index].push_back(MC_index_particle);
+                        vec_inv_masses_per_generation[pos_index].push_back(TLV_MC_particle);
+                        vec_inv_masses_per_generation[pos_index-1][pos_l_vec].SetPxPyPzE(0,0,0,0);
+
+                        break;
+                    }
+                }
+            }    
+        }
+        
+        
+        //check for pi0 
         if(MC_PDG_code == 111 && fabs(TLV_MC_particle.Eta()) < 0.82 && 0) // pi0
         {
             //printf(" \n");
@@ -3622,14 +3670,97 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics)
         } // end of pi0 found
 
     }
+
+
+    //make the historams of invariant masses
+    if(bool_make_invariant_mass_hist_up_to_layer){
+        for(Int_t i_gen = bool_make_invariant_mass_hist_up_to_layer; i_gen >= 1; i_gen--)
+        {
+            for (Int_t i_particle = 0; i_particle < (Int_t) vec_indices_per_generation[i_gen].size(); i_particle++)
+            {
+
+                TRD_MC_Track_pi0 = TRD_ST_Event ->getMCparticle(index_particle_to_track_number[vec_indices_per_generation[i_gen][i_particle]]);
+                Int_t MC_index_mother        = TRD_MC_Track_pi0 ->get_index_mother();
+
+
+                auto it = std::find(std::begin(vec_indices_per_generation[i_gen-1]), std::end(vec_indices_per_generation[i_gen-1]), MC_index_mother);
+                Int_t pos_l_vec = it - std::begin(vec_indices_per_generation[i_gen-1]);
+                if (it == std::end(vec_indices_per_generation[i_gen-1])) printf("ERROR FOUND!!!");
+                printf("i_gen %d, ind mother %d, own ind %d, pos %d, i_part %d\n",i_gen,MC_index_mother,TRD_MC_Track_pi0->get_index_particle(),pos_l_vec,i_particle);
+                vec_inv_masses_per_generation[i_gen-1][pos_l_vec]+=vec_inv_masses_per_generation[i_gen][i_particle];  
+                
+                //pdg codes for lamda and k0 
+                if (TMath::Abs(TRD_MC_Track_pi0->get_PDGcode())==3122) 
+                    h1D_invariant_mass_L -> Fill(vec_inv_masses_per_generation[i_gen][i_particle].M(), 1);
+                if (TMath::Abs(TRD_MC_Track_pi0->get_PDGcode())==310) 
+                    h1D_invariant_mass_K -> Fill(vec_inv_masses_per_generation[i_gen][i_particle].M(), 1);
+                
+            }
+        }
+        vec_inv_masses_per_generation[0][0]-= TLorentzVector(0,0,0,PDG_masses[2112]);
+        h1D_invariant_mass_S -> Fill(vec_inv_masses_per_generation[0][0].M(), 1);
+    }
 }
 //----------------------------------------------------------------------------------------
 
 
 
 //----------------------------------------------------------------------------------------
+
+void Ali_TRD_ST_Analyze::Draw_Inv_Mass_histogram(){
+    //draw the histograms for the invariant mass
+    TCanvas* can_invariant_mass_S = new TCanvas("can_invariant_mass_S", "can_invariant_mass_S", 10, 10, 500, 500);
+    can_invariant_mass_S -> cd();
+    h1D_invariant_mass_S -> Draw("HIST");
+
+    TCanvas* can_invariant_mass_L = new TCanvas("can_invariant_mass_L", "can_invariant_mass_L", 10, 10, 500, 500);
+    can_invariant_mass_L -> cd();
+    h1D_invariant_mass_L -> Draw("HIST");
+
+    TCanvas* can_invariant_mass_K = new TCanvas("can_invariant_mass_K", "can_invariant_mass_K", 10, 10, 500, 500);
+    can_invariant_mass_K -> cd();
+    h1D_invariant_mass_K -> Draw("HIST");
+
+
+}
+//----------------------------------------------------------------------------------------
+
+
+
+//----------------------------------------------------------------------------------------
+  Bool_t Ali_TRD_ST_Analyze::MCComesFromSexaquark(Ali_MC_particle * mcPart) {
+    //
+    // Determine if a certain MC particle comes from a generated sexaquark-nucleon interaction
+    //
+
+    Bool_t isPrimary = kFALSE;
+    Bool_t isDaughterOfPrimary = kFALSE;
+
+    Ali_MC_particle* mcMother;
+
+    // now select only the following particles:
+    // - primary particles
+    isPrimary = mcPart->get_index_mother() == -1; // && mcPart->MCStatusCode() == 1;
+
+    // - daughter of primary particles
+    if (mcPart->get_index_mother() != -1) {
+        mcMother = TRD_ST_Event ->getMCparticle(index_particle_to_track_number[mcPart->get_index_mother()]);
+        isDaughterOfPrimary = mcMother->get_index_mother() == -1; // && mcMother->MCStatusCode() == 0;
+    }
+
+    return isPrimary || isDaughterOfPrimary;
+  }
+
+//----------------------------------------------------------------------------------------
+
+
+
+
+//----------------------------------------------------------------------------------------
 void Ali_TRD_ST_Analyze::Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t color, Double_t line_width, Double_t max_path, Int_t i_track)
 {
+
+    //Draw function, which draws MC tracks up to their decay vertices
     printf("Ali_TRD_ST_Analyze::Draw_MC_track_w_vertices %d \n",i_track);
     TRD_MC_Track = TRD_ST_Event ->getMCparticle(i_track);
     TVector3       TV3_MC_particle_vertex = TRD_MC_Track ->get_TV3_particle_vertex();
@@ -3642,12 +3773,12 @@ void Ali_TRD_ST_Analyze::Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t
     Double_t radius_helix;
     TVector3       TV3_MC_particle_vertex_end;
 
-    std::map<int, std::string> DPG_codes_names =
+    std::map<Int_t, std::string> PDG_codes_names =
     {{11,"e-"},{-11,"e+"},{13,"mu-"},{-13,"mu+"},{22,"gamma"},{111,"pi0"},{113,"pi0"},{130,"K0_l"},{211,"pi+"},{-211,"pi-"},{221,"eta"},{223,"omega"},
     {310,"K0_s"},{321,"K+"},{-321,"K-"},{331,"eta'"},{-331,"anti-eta'"},{2112,"neutron"},{-2112,"anti-neutron"},{2212,"proton"},{-2212,"anti-proton"},
     {3112,"Sigma-"},{-3112,"anti-Sigma-"},{-3122,"anti-Lambda"},{3122,"Lambda"},{3222,"Sigma+"},{3212,"Sigma0"},{-3212,"anti-Sigma0"}};
 
-    std::map<int, Double_t> DPG_codes_charge =
+    std::map<Int_t, Double_t> PDG_codes_charge =
     {{11,-1.0},{-11,1.0},{13,-1.0},{-13,1.0},{22,0},{111,0},{113,0},{130,0},{211,1.0},{-211,-1.0},{221,0},{223,-1.0},
     {310,0},{321,1.0},{-321,-1.0},{331,0},{-331,0},{2112,0},{-2112,0},{2212,1.0},{-2212,-1.0},
     {3112,-1.0},{-3112,1.0},{-3122,0},{3122,0},{3222,1.0},{3212,0},{-3212,0}};
@@ -3659,7 +3790,7 @@ void Ali_TRD_ST_Analyze::Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t
         HistName = "Vertex";
         HistName += i_track_print_nbr ;
         HistName += " ";
-        HistName += DPG_codes_names[MC_PDG_code];
+        HistName += PDG_codes_names[MC_PDG_code];
         track_pos[0] = TV3_MC_particle_vertex.X();
         track_pos[1] = TV3_MC_particle_vertex.Y();
         track_pos[2] = TV3_MC_particle_vertex.Z();
@@ -3685,20 +3816,21 @@ void Ali_TRD_ST_Analyze::Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t
     if (TMath::Power(TV3_MC_particle_vertex.X(),2)+TMath::Power(TV3_MC_particle_vertex.Y(),2) > 430.0 * 430.0) return;
     if (fabs(TV3_MC_particle_vertex.Z()) > 360.0) return;
 
-
-    if (MC_N_daughters > 0)
+    //if particle decays & also has daughters, draw their track up to the decay vertex
+    //else draw till the end of the detector 
+    //all tracks end after a length of 5 m
+    if (MC_N_daughters > 0 && !(TMath::Abs(MC_PDG_code) == 211 || TMath::Abs(MC_PDG_code) == 2212 || TMath::Abs(MC_PDG_code) == 321))
     {
       Int_t          last_daughter_index    = TRD_MC_Track ->get_arr_index_daughters(0);
-      TV3_MC_particle_vertex_end = TRD_ST_Event ->getMCparticle(last_daughter_index) ->get_TV3_particle_vertex();
+      TV3_MC_particle_vertex_end = TRD_ST_Event ->getMCparticle(index_particle_to_track_number[last_daughter_index]) ->get_TV3_particle_vertex();
 
-        printf("MC_track %d, daughter id %d, vertex: (%4.2f,%4.2f,%4.2f)\n", i_track,last_daughter_index,TV3_MC_particle_vertex_end.X(),TV3_MC_particle_vertex_end.Y(),TV3_MC_particle_vertex_end.Z());
     #if defined(USEEVE)
       //TPolyMarker3D *pm = new TPolyMarker3D;
       TEvePointSet *pm = new TEvePointSet;
       HistName = "Vertex";
       HistName += i_track_print_nbr + 1;
       HistName += " ";
-      HistName += DPG_codes_names[MC_PDG_code];
+      HistName += PDG_codes_names[MC_PDG_code];
       track_pos[0] = TV3_MC_particle_vertex_end.X();
       track_pos[1] = TV3_MC_particle_vertex_end.Y();
       track_pos[2] = TV3_MC_particle_vertex_end.Z();
@@ -3720,9 +3852,9 @@ void Ali_TRD_ST_Analyze::Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t
       TV3_MC_particle_vertex_end.SetXYZ(450.,0.,0.);;
     }
 
-    Double_t charge = DPG_codes_charge[MC_PDG_code];
+    Double_t charge = PDG_codes_charge[MC_PDG_code];
 
-    if(fabs(charge)<1e-8){
+    if(fabs(charge)<1e-8){ //neutral particle ... project a straight line
 
       Double_t velo_mc[3] = {TLV_MC_particle.Px()/TLV_MC_particle.P(),TLV_MC_particle.Py()/TLV_MC_particle.P(),TLV_MC_particle.Pz()/TLV_MC_particle.P()};
       track_pos[0] = TV3_MC_particle_vertex.X();
@@ -3752,7 +3884,7 @@ void Ali_TRD_ST_Analyze::Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t
       } while(continue_loop);
           //if(i_track == 0) printf("track_path: %4.3f, pos: {%4.2f, %4.2f, %4.2f} \n",track_path,track_pos[0],track_pos[1],track_pos[2]);
     }
-    else{
+    else{ //charged particle .. project a helix
         Double_t dist_to_endvertex = 100;
         vector<Double_t> fhelix = Get_Helix_params_from_kine(TLV_MC_particle,TV3_MC_particle_vertex,1.0*charge);
         TRD_ST_TPC_Track_MC ->setHelix(fhelix[0],fhelix[1],fhelix[2],fhelix[3],fhelix[4],fhelix[5]);
@@ -3767,7 +3899,7 @@ void Ali_TRD_ST_Analyze::Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t
           #if defined(USEEVE)
                   vec_TPL3D_helix_MC[i_track]        ->SetNextPoint(track_pos[0],track_pos[1],track_pos[2]);
           #endif
-            continue_loop = track_path < 500 && dist_to_endvertex>= 10 && radius_helix <= 460.0 && fabs(track_pos[2]) <= 360.0 ;
+            continue_loop = track_path < 1500 && dist_to_endvertex>= 10 && radius_helix <= 460.0 && fabs(track_pos[2]) <= 360.0 ;
 
             TRD_ST_TPC_Track_MC ->Evaluate(track_path,track_pos);
             radius_helix = TMath::Sqrt( TMath::Power(track_pos[0],2) + TMath::Power(track_pos[1],2) );
@@ -3784,7 +3916,7 @@ void Ali_TRD_ST_Analyze::Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t
     HistName = "track ";
     HistName += i_track;
     HistName += " ";
-    HistName += DPG_codes_names[MC_PDG_code];
+    HistName += PDG_codes_names[MC_PDG_code];
     vec_TPL3D_helix_MC[i_track]    ->SetName(HistName.Data());
     vec_TPL3D_helix_MC[i_track]    ->SetLineStyle(1);
     vec_TPL3D_helix_MC[i_track]    ->SetLineWidth(line_width);
@@ -3848,8 +3980,10 @@ void Ali_TRD_ST_Analyze::Draw_MC_event(Long64_t i_event, Int_t graphics)
         #if defined(USEEVE)
             if(graphics)
             {
-              Draw_MC_track_w_vertices(i_MC_draw_track, kYellow,2,500.0, i_track);
-              i_MC_draw_track++;
+                if(MCComesFromSexaquark(TRD_ST_Event ->getMCparticle(i_track)) || 1){
+                    Draw_MC_track_w_vertices(i_MC_draw_track, kYellow,2,500.0, i_track);
+                    i_MC_draw_track++;
+                }
             }
 
         #endif

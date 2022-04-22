@@ -270,6 +270,13 @@ private:
 
     Int_t i_MC_draw_track = 0;
 
+
+    TH1D* h1D_invariant_mass_S;     //histogram for plotting the invariant mass of the S particle     
+    TH1D* h1D_invariant_mass_L;     //histogram for plotting the invariant mass of the L particle 
+    TH1D* h1D_invariant_mass_K;     //histogram for plotting the invariant mass of the K particle
+    std::map<Int_t, Int_t> index_particle_to_track_number; //map of particle index to track number
+    
+    
     //TFile* out_gain;
 
 public:
@@ -278,7 +285,9 @@ public:
 
     void Init_tree(TString SEList);
     Int_t Loop_event(Long64_t i_event, Int_t graphics);
-    void Scan_MC_Event(Int_t graphics);
+    void Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant_mass_hist);
+    void Draw_Inv_Mass_histogram();
+
     Int_t Draw_event(Long64_t i_event, Int_t graphics, Int_t draw_tracks, Int_t draw_tracklets, Double_t track_path, Int_t draw_digits);
     vector<Double_t> Get_Helix_params_from_kine(TLorentzVector TLV_particle, TVector3 TV3_vertex, Double_t charge);
     void Draw_MC_event(Long64_t i_event, Int_t graphics);
@@ -319,6 +328,9 @@ public:
     void Draw_TPC_track(Int_t i_track, Int_t color, Double_t line_width, Double_t max_path);
     void Draw_MC_track(Int_t i_track, Int_t color, Double_t line_width, Double_t max_path);
     void Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t color, Double_t line_width, Double_t max_path, Int_t i_track);
+    Bool_t MCComesFromSexaquark(Ali_MC_particle * mcPart);
+  
+
     TH1D* get_layer_radii_hist() {return h_layer_radii_det;}
     Long64_t get_N_Events() {return N_Events;}
     void set_input_lists(TString input_dir_lists_in) {input_dir_lists = input_dir_lists_in;}
