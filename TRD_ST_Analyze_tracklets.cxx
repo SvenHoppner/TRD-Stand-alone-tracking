@@ -11,6 +11,13 @@ static Double_t distance_circ_point_2D(Double_t x,Double_t y,Double_t *p)
     return d2;
 }
 
+static Double_t distance_circ_point_2D_new(Double_t x, Double_t y, Double_t x_p, Double_t y_p, Double_t radius_helix){
+    
+    // D = |sqrt((xp-x0)^2 + (yp-y0)^2)-r|
+
+    Double_t d2 = TMath::Abs(TMath::Sqrt(TMath::Power(x-x_p, 2.0)+TMath::Power(y-y_p, 2.0))-radius_helix);
+    return d2;
+}
 
 // function to be minimized - for circle fit
 static void sum_distance_circ_point_2D(Int_t &, Double_t *, Double_t & sum, Double_t * par, Int_t )
@@ -41,6 +48,10 @@ Ali_TRD_ST_Analyze::Ali_TRD_ST_Analyze(TString out_dir, TString out_file_name, I
 
 	vec_tp_pvdca_vs_sector = new TProfile("vec_th1d_pvdca_vs_sector","vec_th1d_pvdca_vs_sector",90,0,89);
     vec_TH2D_pvdca_vs_sector = new TH2D("vec_th2d_pvdca_vs_sector","vec_th2d_pvdca_vs_sector",90,0,89,100,0,50);
+
+    h2D_nuclei_vertex_XY = new TH2D("h2D_nuclei_vertex_XY","h2D_nuclei_vertex_XY",400,-450,450,400,-450,450);
+
+    h1D_nuclei_vertex_R = new TH1D("h1D_nuclei_vertex_R", "h1D_nuclei_vertex_R", 500, 0, 900);
 
     TPC_single_helix = new Ali_Helix();
     vec_h2D_pT_vs_TPC_TRD_residuals.resize(540);
@@ -109,7 +120,11 @@ Ali_TRD_ST_Analyze::Ali_TRD_ST_Analyze(TString out_dir, TString out_file_name, I
     TRD_Kalman_track = new Ali_Kalman_Track();
     TPC_track = new Ali_TPC_Track();
 
-    //create new
+    //----------------------------------------------------------------
+    // create new objects for reading out GNN data
+    TRD_TPC_Track_GNN = new Ali_TRD_ST_TPC_Track_GNN();
+
+    new_tracklet = new Ali_TRD_ST_Tracklets_for_GNN();
 
 
     //NT_secondary_vertices = new TNtuple("NT_secondary_vertices","NT_secondary_vertices Ntuple","x:y:z:ntracks:pT_AB:qpT_A:qpT_B:AP_pT:AP_alpha:dcaTPC:pathTPC:InvM:Eta:Phi:GlobEv:dotprod:TPCdEdx_A:dca_TPC_A:p_TPC_A:TPCdEdx_B:dca_TPC_B:p_TPC_B:InvMK0s:dcaAB:InvML:InvMaL");
@@ -127,6 +142,19 @@ Ali_TRD_ST_Analyze::Ali_TRD_ST_Analyze(TString out_dir, TString out_file_name, I
     Tree_TRD_Self_Event_out  = new TTree("Tree_TRD_Self_Event" , "TRD_Self_Events" );
     Tree_TRD_Self_Event_out  ->Branch("Tree_TRD_Self_Event_branch"  , "TRD_Self_Event", TRD_Self_Event );
     Tree_TRD_Self_Event_out  ->SetAutoSave( 5000000 );
+
+
+    // construct Tree for GNN background input
+    Tree_Input_GNN_bckgr = NULL;
+    Tree_Input_GNN_bckgr = new TTree("Tree_TRD_GNN_Input_bckgr", "TRD_GNN_Input_bckgr");
+    Tree_Input_GNN_bckgr -> Branch("Tree_TRD_GNN_Input_branch_bckgr", "TRD_TPC_Track", TRD_TPC_Track_GNN);
+    Tree_Input_GNN_bckgr -> SetAutoSave( 5000000 );
+
+    // construct Tree for GNN signal input 
+    Tree_Input_GNN_sign = NULL;
+    Tree_Input_GNN_sign = new TTree("Tree_TRD_GNN_Input_sign", "TRD_GNN_Input_sign");
+    Tree_Input_GNN_sign -> Branch("Tree_TRD_GNN_Input_branch_sign", "TRD_TPC_Track", TRD_TPC_Track_GNN);
+    Tree_Input_GNN_sign -> SetAutoSave( 5000000 );
     //------------------------------------------------
 
 
@@ -4123,7 +4151,915 @@ void Ali_TRD_ST_Analyze::Draw_MC_event(Long64_t i_event, Int_t graphics)
 }
 //----------------------------------------------------------------------------------------
 
+void Ali_TRD_ST_Analyze::printNumber_of_Counts(){
+    printf("Number of Nuclear Interactions that pass the TRD-radius-cut: %i\n", (Int_t) N_NI_radius_cut);
+}
 
+pair<std::vector<pair<std::vector<Float_t>, Int_t>>, std::vector<pair<std::vector<Float_t>, Int_t>>> Ali_TRD_ST_Analyze::NIInteractionCandidateswithHelix(Long64_t i_event){
+    UShort_t NumTracks            = TRD_ST_Event ->getMCparticles();
+    std::map<Int_t, Int_t> index_to_PDG;
+    std::vector<Int_t> mother_part;
+    std::map<Int_t, Int_t> index_particle_to_track_number;
+    std::vector<Int_t> mothers_with_cut;
+    std::vector<Int_t> mothers_decay_behind_TRD;
+    std::vector<pair<std::vector<Float_t>, Int_t>> helix_params_with_index;
+    std::vector<pair<std::vector<Float_t>, Int_t>> helix_params_of_mothers_with_cut;
+    std::vector<pair<std::vector<Float_t>, Int_t>> helix_params_of_mothers_behind_TRD;
+
+
+
+    //container for vertices of daughter particles and the PDG code of the mother
+
+    std::vector<pair<std::vector <Double_t>, Int_t>> pos_vertices;
+
+    std::vector<pair<std::vector <Double_t>, Int_t>> pos_vertices_behindTRD;
+
+    //map of candidates for nuclear interactions
+    std::map <Int_t, std::string> dict_mother = {{1000010020, "Deuteron"}, {1000010030, "Triton"}, {1000020030, "He3"}, {1000020040, "Alpha"}, {1000020050, "He5"}, {1000030050, "Li5"}, {-1000010020, "Anti-Deuteron"}, 
+    {-1000010030, "Anti-Triton"}, {-1000020030, "Anti-He3"}, {-1000020040, "Anti-alpha"}, {1000020050, "He5"}};
+
+    //map of outgoings in nuclear interactions
+    std::map<Int_t, std::string> dict_low = {{2212, "proton"}, {-2212, "anti-proton"}, {311, "K0"}, {321, "K+"}, {-321, "K-"}, {2112, "neutron"}, {-2112, "anti-neutron"}, {111, "pi0"}, {211, "pi+"}, {-211, "pi-"}};
+    std::map<Int_t, std::string>::iterator it;
+
+    //charges 
+    std::map<Int_t, Double_t> dict_charge = {{2212, 1.0}, {-2212, -1.0}, {311, 0}, {321, 1.0}, {-321, -1.0}, {2112, 0.0}, {-2112, 0.0}, {111, 0.0}, {211, 1.0}, {-211, -1.0}, {1000010020, 1.0}, {1000010030, 1.0},
+    {1000020030, 2.0}, {1000020040, 2.0}, {1000020050, 2.0}, {1000030050, 3.0}, {-1000010020, -1.0}, {-1000010030, -1.0}, {-1000020030, -2.0}, {-1000020040, -2.0}, {1000020050, 2.0} };
+
+    //find mother particles
+    for (Int_t i_track=0; i_track < NumTracks; i_track++){
+        TRD_MC_Track = TRD_ST_Event ->getMCparticle(i_track);
+
+        //get relevant params
+        TVector3       TV3_MC_particle_vertex = TRD_MC_Track ->get_TV3_particle_vertex();
+        TLorentzVector TLV_MC_particle        = TRD_MC_Track ->get_TLV_particle();
+        Int_t          MC_PDG_code            = TRD_MC_Track ->get_PDGcode();
+        Int_t          MC_index_mother        = TRD_MC_Track ->get_index_mother();
+        Int_t          MC_index_particle      = TRD_MC_Track ->get_index_particle();
+        Int_t          MC_N_daughters         = TRD_MC_Track ->get_N_daughters();
+        
+        index_to_PDG.insert(std::pair<int, int> (MC_index_particle, MC_PDG_code));
+        index_particle_to_track_number.insert(std::pair<int, int> (MC_index_particle, i_track));
+
+        it = dict_mother.find(MC_PDG_code);
+        if(TLV_MC_particle.P() > 0.1  && fabs(TLV_MC_particle.Eta()) < 0.85 && MC_N_daughters > 2 && it != dict_mother.end())
+        {
+            //printf("------------------------- \n");
+            //printf("Candidate found, MC_index_particle: %d, PDG-code: %d, Particle: %s, N_daughters: %d, Momentum: %4.3f\n", i_track, MC_PDG_code, dict_mother[MC_PDG_code].c_str(), MC_N_daughters, TLV_MC_particle.P());
+            mother_part.push_back(MC_index_particle);
+            //printf("------------------------- \n");
+
+
+            //Also: push_back helix params of mother particle for later comparison with TPC-tracks together with MC_index
+            vector<Double_t> fhelix = Get_Helix_params_from_kine(TLV_MC_particle, TV3_MC_particle_vertex, (-1.0)*dict_charge[MC_PDG_code]);
+            vector<Float_t> params = {(Float_t) fhelix[0], (Float_t) fhelix[1], (Float_t) fhelix[2], (Float_t) fhelix[3], (Float_t) fhelix[4], (Float_t) fhelix[5]};
+            helix_params_with_index.push_back(std::make_pair(params, MC_index_particle));
+        }
+    }
+    
+    for (Int_t i_track = 0; i_track < NumTracks; i_track++){
+        TRD_MC_Track = TRD_ST_Event ->getMCparticle(i_track);
+        
+
+        TVector3       TV3_MC_particle_vertex = TRD_MC_Track ->get_TV3_particle_vertex();
+        TLorentzVector TLV_MC_particle        = TRD_MC_Track ->get_TLV_particle();
+        Int_t          MC_PDG_code            = TRD_MC_Track ->get_PDGcode();
+        Int_t          MC_index_mother        = TRD_MC_Track ->get_index_mother();
+        Int_t          MC_index_particle      = TRD_MC_Track ->get_index_particle();
+        Int_t          MC_N_daughters         = TRD_MC_Track ->get_N_daughters();
+        Double_t       radius = TMath::Sqrt( TMath::Power(TV3_MC_particle_vertex[0],2) + TMath::Power(TV3_MC_particle_vertex[1],2) );  
+        
+        
+       
+        
+        // find daughters of known mothers (do not fullfill special requirements regarding the type of particle)
+        
+
+        if (TLV_MC_particle.P()>0.1 && fabs(TLV_MC_particle.Eta()) < 0.85 && std::find(mother_part.begin(), mother_part.end(), MC_index_mother) != mother_part.end())
+        {   
+
+            //printf("\n");
+            //printf("Daughter of MC_index: %d, PDG-Code: %d, Index of Daughter: %d, Particle: %s, Momentum of Daughter: %4.3f, Vertex (X,Y,Z):(%4.3f, %4.3f, %4.3f), Radius: %4.3f\n", MC_index_mother, MC_PDG_code, MC_index_particle, 
+            //dict_low[MC_PDG_code].c_str(), TLV_MC_particle.P(), TV3_MC_particle_vertex.X(), TV3_MC_particle_vertex.Y(), TV3_MC_particle_vertex.Z(), radius);
+
+            // radius cuts to specify candidates that are in the respective TRD layers
+            
+            if (radius > 270 && radius < 310){
+                    //printf("\n");
+                    //printf("Daughter of MC_index: %d, Mother-particle: %s, PDG-Code: %d, Index of Daughter: %d, Particle: %s, Momentum of Daughter: %4.3f, Vertex (X,Y,Z):(%4.3f, %4.3f, %4.3f), Radius: %4.3f\n", MC_index_mother, dict_mother[index_to_PDG[MC_index_mother]].c_str(), MC_PDG_code, MC_index_particle, 
+                    //dict_low[MC_PDG_code].c_str(), TLV_MC_particle.P(), TV3_MC_particle_vertex.X(), TV3_MC_particle_vertex.Y(), TV3_MC_particle_vertex.Z(), radius);
+                    
+                    //get PDG code of mother particle
+                    Int_t MC_PDG_Code_mother = index_to_PDG[MC_index_mother];
+                    //daughter creation vertex
+                    std::vector<Double_t> pos = {TV3_MC_particle_vertex.X(), TV3_MC_particle_vertex.Y(), TV3_MC_particle_vertex.Z()};
+                    //push back tuple of daughter creation vertex and PDG code of mother
+                    pos_vertices.push_back(std::make_pair(pos, MC_PDG_Code_mother));
+                    // push back relevant mothers for track plotting later
+                    mothers_with_cut.push_back(MC_index_mother);
+                    //printf("Radius of NI: %f\n", radius);
+                    // draw helices of daughter particles (require charge to be unequal to 0)
+                
+            }
+            else if (radius > 400){
+                Int_t MC_PDG_Code_mother = index_to_PDG[MC_index_mother];
+                //daughter creation vertex
+                std::vector<Double_t> pos = {TV3_MC_particle_vertex.X(), TV3_MC_particle_vertex.Y(), TV3_MC_particle_vertex.Z()};
+                // push back daughter creation vertex and PDG code of mother particle
+                pos_vertices_behindTRD.push_back(std::make_pair(pos, MC_PDG_Code_mother));
+                // push back mother particle that decays behind TRD
+                mothers_decay_behind_TRD.push_back(MC_index_mother);
+            }
+            
+        }
+    }
+
+    // remove duplicates from lists
+    if ((Int_t) mothers_with_cut.size() > 0){
+        std::sort(mothers_with_cut.begin(), mothers_with_cut.end());
+        mothers_with_cut.erase(std::unique(mothers_with_cut.begin(), mothers_with_cut.end()), mothers_with_cut.end());
+    }
+    if ((Int_t) mothers_decay_behind_TRD.size() > 0){
+        std::sort(mothers_decay_behind_TRD.begin(), mothers_decay_behind_TRD.end());
+        mothers_decay_behind_TRD.erase(std::unique(mothers_decay_behind_TRD.begin(), mothers_decay_behind_TRD.end()), mothers_decay_behind_TRD.end());
+    }
+    if ((Int_t) pos_vertices.size() > 0){
+        std::sort(pos_vertices.begin(), pos_vertices.end());
+        pos_vertices.erase(std::unique(pos_vertices.begin(), pos_vertices.end()), pos_vertices.end());
+    }
+    if ((Int_t) pos_vertices_behindTRD.size() > 0) {
+        std::sort(pos_vertices_behindTRD.begin(), pos_vertices_behindTRD.end());
+        pos_vertices_behindTRD.erase(std::unique(pos_vertices_behindTRD.begin(), pos_vertices_behindTRD.end()), pos_vertices_behindTRD.end());
+    }
+
+    // get helix parameters of mothers that make interactions in the TRD
+
+    for(Int_t i=0; i < (Int_t) mothers_with_cut.size(); i++){
+        Int_t curr_mother = mothers_with_cut[i];
+        for (Int_t j=0; j< (Int_t) helix_params_with_index.size(); j++){
+            if (curr_mother == helix_params_with_index[j].second){
+                helix_params_of_mothers_with_cut.push_back(helix_params_with_index[j]);
+            }
+        }
+
+    }
+
+    // get helix params of mothers that interact at least behind the TRD
+    for(Int_t i=0; i < (Int_t) mothers_decay_behind_TRD.size(); i++){
+        Int_t curr_mother = mothers_decay_behind_TRD[i];
+        for (Int_t j=0; j< (Int_t) helix_params_with_index.size(); j++){
+            if (curr_mother == helix_params_with_index[j].second){
+                helix_params_of_mothers_behind_TRD.push_back(helix_params_with_index[j]);
+            }
+        }
+    }
+    return std::make_pair(helix_params_of_mothers_with_cut, helix_params_of_mothers_behind_TRD);
+
+}
+
+std::map<Int_t, Int_t> Ali_TRD_ST_Analyze::ReturnDictionary(Long64_t i_event, Int_t MC_index_to_track_number, Int_t MC_index_to_PDG_code){
+    UShort_t NumTracks            = TRD_ST_Event ->getMCparticles();
+    std::map<Int_t, Int_t> index_particle_to_track_number;
+    std::map<Int_t, Int_t> index_to_PDG;
+    if (MC_index_to_track_number){
+        for (Int_t i_track=0; i_track < NumTracks; i_track++){
+        TRD_MC_Track = TRD_ST_Event ->getMCparticle(i_track);
+        Int_t          MC_index_particle      = TRD_MC_Track ->get_index_particle();
+        
+        index_particle_to_track_number.insert(std::pair<int, int> (MC_index_particle, i_track));
+
+        }
+    return index_particle_to_track_number;
+    }
+    else if (MC_index_to_PDG_code){
+        for (Int_t i_track=0; i_track < NumTracks; i_track++){
+        TRD_MC_Track = TRD_ST_Event ->getMCparticle(i_track);
+        Int_t          MC_index_particle      = TRD_MC_Track ->get_index_particle();
+        Int_t          MC_PDG_code            = TRD_MC_Track ->get_PDGcode();
+        
+        index_to_PDG.insert(std::pair<int, int> (MC_index_particle, MC_PDG_code));
+
+        }
+    return index_to_PDG;
+    }
+
+}
+
+
+void Ali_TRD_ST_Analyze::AddVertextoHisto(Long64_t i_event)
+{   UShort_t NumTracks            = TRD_ST_Event ->getMCparticles(); // number of tracks in this event
+    std::vector<Int_t> mother_part;
+    std::vector<pair<Int_t, Int_t>> mother_part_N;
+    std::vector<float> X_positions;
+    std::vector<float> Y_positions;
+    Int_t N_cand_found = 0;
+    
+
+    std::map <int, std::string> dict_mother = {{1000010020, "Deuteron",}, {1000010030, "Triton",}, {1000020030, "He3",}, {1000020040, "Alpha",}, {1000020050, "He5"}, {1000030050, "Li5",}, {-1000010020, "Anti-Deuteron"}, 
+    {-1000010030, "Anti-Triton"}, {-1000020030, "Anti-He3"}, {-1000020040, "Anti-alpha"}, {1000020050, "He5"}};
+
+    std::map <int, std::string> dict_low = {{2212, "proton"}, {-2212, "anti-proton"}, {311, "K0"}, {321, "K+"}, {-321, "K-"}, {2112, "neutron"}, {-2112, "anti-neutron"}, {111, "pi0"}, {211, "pi+"}, {-211, "pi-"}};
+
+
+    for(Int_t i_track = 0; i_track < NumTracks; i_track++)
+    {
+        TRD_MC_Track = TRD_ST_Event -> getMCparticle(i_track);
+
+        TVector3       TV3_MC_particle_vertex = TRD_MC_Track ->get_TV3_particle_vertex();
+        TLorentzVector TLV_MC_particle        = TRD_MC_Track ->get_TLV_particle();
+        Int_t          MC_PDG_code            = TRD_MC_Track ->get_PDGcode();
+        Int_t          MC_index_mother        = TRD_MC_Track ->get_index_mother();
+        Int_t          MC_index_particle      = TRD_MC_Track ->get_index_particle();
+        Int_t          MC_N_daughters         = TRD_MC_Track ->get_N_daughters();
+        //Double_t       radius                 = TRD_MC_Track -> TMath::Sqrt(TMath::Power(TV3_MC_particle_vertex[0], 2) + TMath::Power(TV3_MC_particle_vertex[1], 2));
+        
+        std::map<int, std::string>::iterator it;
+
+
+        it = dict_mother.find(MC_PDG_code);
+
+        if(//(charge > 0.0 || charge < 0.0) 
+            TLV_MC_particle.P() > 0.1  && fabs(TLV_MC_particle.Eta()) < 0.85 && MC_N_daughters > 2 && it != dict_mother.end()
+          )
+        {
+            //printf("\n");
+            //printf("------------------------- \n");
+            //printf("Candidate found, MC_index_particle: %d, PDG-code: %d, Particle: %s, N_daughters: %d, Momentum: %4.3f\n", MC_index_particle, MC_PDG_code, dict_mother[MC_PDG_code].c_str(), MC_N_daughters, TLV_MC_particle.P());
+            mother_part.push_back(MC_index_particle);
+            N_cand_found++;
+            //printf("------------------------- \n");
+        }
+    
+    }
+
+    for (Int_t i=0; i<(Int_t) mother_part.size(); i++){
+        mother_part_N.push_back(std::make_pair(mother_part[i], 0));
+    }
+
+    for (Int_t i_track=0; i_track<NumTracks; i_track++){
+            TRD_MC_Track = TRD_ST_Event ->getMCparticle(i_track);
+            TLorentzVector TLV_MC_particle        = TRD_MC_Track ->get_TLV_particle();
+            Int_t          MC_index_mother        = TRD_MC_Track ->get_index_mother();
+            Int_t position = std::find(mother_part.begin(), mother_part.end(), MC_index_mother) - mother_part.begin();
+            //momentum?
+            if (TLV_MC_particle.P()>0.1 && fabs(TLV_MC_particle.Eta()) < 0.85 && position < (Int_t) mother_part.size()){
+                //printf("Found at position: %i; Length of mother_part: %d \n", position, (Int_t) mother_part.size());
+                mother_part_N[position].second++;
+            }   
+
+    }
+
+    
+    
+
+    for (Int_t i_track = 0; i_track < NumTracks; i_track++){
+        TRD_MC_Track = TRD_ST_Event ->getMCparticle(i_track);
+        
+
+        TVector3       TV3_MC_particle_vertex = TRD_MC_Track ->get_TV3_particle_vertex();
+        TLorentzVector TLV_MC_particle        = TRD_MC_Track ->get_TLV_particle();
+        Int_t          MC_PDG_code            = TRD_MC_Track ->get_PDGcode();
+        Int_t          MC_index_mother        = TRD_MC_Track ->get_index_mother();
+        Int_t          MC_index_particle      = TRD_MC_Track ->get_index_particle();
+        Int_t          MC_N_daughters         = TRD_MC_Track ->get_N_daughters();
+        //Double_t       radius                 = TRD_MC_Track -> (TMath::Sqrt(TMath::Power(TV3_MC_particle_vertex[0], 2) + TMath::Power(TV3_MC_particle_vertex[1], 2)));
+        //std::vector<float> x_pos_vertices;
+        //std::vector<float> y_pos_vertices;
+        //std::vector<float> z_pos_vertices;
+
+
+        std::map<int, std::string>::iterator it;
+        Double_t charge = 1.0;
+
+
+        if (TLV_MC_particle.P()>0.1 && fabs(TLV_MC_particle.Eta()) < 0.85 && std::find(mother_part.begin(), mother_part.end(), MC_index_mother) != mother_part.end())
+        {   
+            Int_t pos = std::find(mother_part.begin(), mother_part.end(), MC_index_mother) - mother_part.begin();
+            Double_t weight = (Double_t) 1/ (Double_t) mother_part_N[pos].second;
+            //printf("weight: %f, daughter particles: %d\n", weight, mother_part_N[pos].second);
+            Double_t radius = TMath::Sqrt( TMath::Power(TV3_MC_particle_vertex[0],2) + TMath::Power(TV3_MC_particle_vertex[1],2) );
+            //printf("\n");
+            //printf("Daughter of MC_index: %d, PDG-Code: %d, Index of Daughter: %d, Particle: %s, Momentum of Daughter: %4.3f, Vertex (X,Y,Z):(%4.3f, %4.3f, %4.3f), Radius: %4.3f\n", MC_index_mother, MC_PDG_code, MC_index_particle, 
+            //dict_low[MC_PDG_code].c_str(), TLV_MC_particle.P(), TV3_MC_particle_vertex.X(), TV3_MC_particle_vertex.Y(), TV3_MC_particle_vertex.Z(), radius);
+            h2D_nuclei_vertex_XY -> Fill(TV3_MC_particle_vertex.X(), TV3_MC_particle_vertex.Y(), weight);
+            h1D_nuclei_vertex_R -> Fill(radius, weight);
+            if (radius < 310 && radius > 270){
+                N_NI_radius_cut += weight;
+
+            }
+            
+
+            
+        }
+
+
+    }
+
+
+
+
+}
+
+
+std::vector<Int_t> Ali_TRD_ST_Analyze::CompareMCHelizestoTPCHelizes(Long64_t i_event, std::vector<pair<std::vector<Float_t>, Int_t>> helix_params_with_index){
+    UShort_t NumTracks            = TRD_ST_Event -> getNumTracks(); // number of tracks in this event
+    Int_t    NumTracklets         = TRD_ST_Event -> getNumTracklets();
+    std::vector<Int_t> Found_TPC_tracks;
+    //std::map<Int_t, Int_t> MC_index_vs_track_numbers;
+
+    //cut values for MC-TPC-identification
+    Float_t cut_on_x = 150;
+    Float_t cut_on_tan_lambd = 0.01;
+    Float_t cut_on_y = 150;
+    Float_t cut_on_curv = 0.00005;
+    Float_t cut_on_z = 0.2;
+
+    Int_t Number_of_cand_to_match = helix_params_with_index.size();
+    printf("Number of cand to match: %i\n", Number_of_cand_to_match);
+    for (Int_t j=0; j < (Int_t) helix_params_with_index.size(); j++){
+        std::vector<Float_t> helix_param_of_mother = helix_params_with_index[j].first;
+        printf("Helix_params of MC-Track: %f, %f, %f, %f, %f, %f\n", helix_param_of_mother[0], helix_param_of_mother[1], helix_param_of_mother[2], helix_param_of_mother[3], helix_param_of_mother[4], helix_param_of_mother[5]);
+
+        for(Int_t i_track = 0; i_track < NumTracks; i_track++){
+            TRD_ST_TPC_Track = TRD_ST_Event ->getTrack(i_track);
+            TLorentzVector TLV_part = TRD_ST_TPC_Track ->get_TLV_part();
+            Float_t momentum = TLV_part.P();
+            if (momentum < 0.3){
+                continue;
+            }
+            Float_t Helix_params[6];  
+            // get helix params of TPC track
+            for (Int_t i=0; i<6; i++){
+                Helix_params[i] = TRD_ST_TPC_Track -> getHelix_param(i);
+            }
+
+            printf("i_track: %i, Helix_params of TPC-Track: %f, %f, %f, %f, %f, %f\n", i_track, Helix_params[0], Helix_params[1], Helix_params[2], Helix_params[3], Helix_params[4], Helix_params[5]);
+            //cut on tal
+            if (fabs(helix_param_of_mother[3]-Helix_params[3])<cut_on_tan_lambd){
+                printf("Passed cut on tal\n");
+            //cut on z
+                if (fabs(helix_param_of_mother[1]-Helix_params[1])<cut_on_z){
+                    printf("Passed cut on z\n");
+            //cut on curv
+                    if (fabs(helix_param_of_mother[4]-Helix_params[4])<cut_on_curv){
+                        printf("Passed cut on curv\n");
+            //cut on x
+                        if(fabs(helix_param_of_mother[5]-Helix_params[5])<cut_on_x){
+                            printf("Passed cut on x\n");
+            //cut on y                
+                            if(fabs(helix_param_of_mother[0]-Helix_params[0])<cut_on_y){
+                                printf("Passed cut on y\n");
+                                //MC_index_vs_track_numbers.insert(std::pair(helix_params_with_index[j].second, i_track));
+                                Found_TPC_tracks.push_back(i_track);
+                                printf("Found match of MC-true: %i and TPC-Track: %i\n\n", helix_params_with_index[j].second, i_track);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }      
+        }
+
+    }
+    return Found_TPC_tracks;
+}
+
+
+
+void Ali_TRD_ST_Analyze::DrawTrackletsAroundTPCTracksofCandidates(Long64_t i_event, Int_t apply_Helix_cut, std::vector<Int_t> Found_TPC_Tracks, Int_t graphics, Int_t draw_tracklets, Int_t write_out_bckg, Int_t write_out_sign, Int_t Color = kAzure-2){
+    Int_t   Num_tracks = Found_TPC_Tracks.size();
+    Int_t   NumTracklets         = TRD_ST_Event ->getNumTracklets();
+
+
+    if ((Int_t) Found_TPC_Tracks.size()>0){
+        for(Int_t i_track=0; i_track < Num_tracks; i_track++){
+            Double_t track_pos[3];
+
+            TRD_ST_TPC_Track = TRD_ST_Event ->getTrack(Found_TPC_Tracks[i_track]);
+            // TODO: identify relevant features to be read out
+            //Double_t nsigma_TPC_e   = TRD_ST_TPC_Track ->getnsigma_e_TPC();
+            //Double_t nsigma_TPC_pi  = TRD_ST_TPC_Track ->getnsigma_pi_TPC();
+            //Double_t nsigma_TPC_p   = TRD_ST_TPC_Track ->getnsigma_p_TPC();
+            //Double_t nsigma_TOF_e   = TRD_ST_TPC_Track ->getnsigma_e_TOF();
+            //Double_t nsigma_TOF_pi  = TRD_ST_TPC_Track ->getnsigma_pi_TOF();
+            //Double_t TRD_signal     = TRD_ST_TPC_Track ->getTRDSignal();
+            //Double_t TRDsumADC      = TRD_ST_TPC_Track ->getTRDsumADC();
+            //Double_t dca            = TRD_ST_TPC_Track ->getdca();  // charge * distance of closest approach to the primary vertex
+            TLorentzVector TLV_part = TRD_ST_TPC_Track ->get_TLV_part();
+            //UShort_t NTPCcls        = TRD_ST_TPC_Track ->getNTPCcls();
+            //UShort_t NTRDcls        = TRD_ST_TPC_Track ->getNTRDcls();
+            //UShort_t NITScls        = TRD_ST_TPC_Track ->getNITScls();
+            //Float_t TPCchi2         = TRD_ST_TPC_Track ->getTPCchi2();
+            Float_t TPCdEdx         = TRD_ST_TPC_Track ->getTPCdEdx();
+            Float_t TOFsignal       = TRD_ST_TPC_Track ->getTOFsignal(); // in ps (1E-12 s)
+            //Float_t Track_length    = TRD_ST_TPC_Track ->getTrack_length();
+            Float_t Helix_params[6];    
+            
+            for (Int_t i=0; i<6; i++){
+                Helix_params[i] = TRD_ST_TPC_Track -> getHelix_param(i);
+            }
+		
+            Float_t momentum        = TLV_part.P();
+            Float_t energy          = TLV_part.E();
+            Float_t eta_track       = TLV_part.Eta();
+            Float_t pT_track        = TLV_part.Pt();
+            Float_t theta_track     = TLV_part.Theta();
+            Float_t phi_track       = TLV_part.Phi();
+            
+            for (Float_t t = 0.0; t < 1000.0; t += 1.0){
+                TRD_ST_TPC_Track -> Evaluate(t, track_pos);
+                Double_t radius = TMath::Sqrt(TMath::Power(track_pos[0],2) + TMath::Power(track_pos[1],2));
+                if (radius > 290) break; 
+            }
+            Float_t phi = TMath::ATan2(track_pos[1], track_pos[0]);
+            Float_t phi_deg = (phi*TMath::RadToDeg());
+            if (phi_deg < 0) phi_deg = phi_deg + 360;
+            // infer sector of incident track
+            Int_t Track_sector = (Int_t) ((phi_deg)/ 20.0);
+            //printf("Track_number: %i, Sector: %i, Angle: %f\n", Found_TPC_Tracks[i_track], Track_sector, phi_deg);
+            
+
+#if defined(USEEVE)
+            if (graphics){
+                Draw_TPC_track(Found_TPC_Tracks[i_track],Color,3,1000);
+            
+            }
+#endif
+            
+            // setters for tree filling
+            if (write_out_bckg || write_out_sign){
+                TRD_TPC_Track_GNN -> set_TLV_part(TLV_part);
+                TRD_TPC_Track_GNN -> setenergy(energy);
+                TRD_TPC_Track_GNN -> setmomentum(momentum);
+                TRD_TPC_Track_GNN -> setpT(pT_track);
+                TRD_TPC_Track_GNN -> settheta(theta_track);
+                TRD_TPC_Track_GNN -> setphi(phi_track);
+                TRD_TPC_Track_GNN -> setTPCdEdx(TPCdEdx);
+                TRD_TPC_Track_GNN -> setHelix(Helix_params[0], Helix_params[1], Helix_params[2], Helix_params[3], Helix_params[4], Helix_params[5]);
+                TRD_TPC_Track_GNN -> setsectorofincidence(Track_sector); //sector of incidence
+                TRD_TPC_Track_GNN -> seteventnumber((Int_t) i_event);
+                TRD_TPC_Track_GNN -> settracknumber( Found_TPC_Tracks[i_track]);
+            }
+
+
+            // plot/save the tracklets
+            TVector3 TV3_offset;
+            TVector3 TV3_offset_local;
+            TVector3 TV3_dir;
+            TVector3 TV3_dir_local;
+            Int_t    i_det, trk_index;
+            // take tracklets only from adjacent sectors of incidenting TPC-Track
+            Int_t search_in_sectors[3];
+            if (Track_sector == 17){ search_in_sectors[0] = 0; search_in_sectors[1] = 16; search_in_sectors[2] = 17;}
+            else if (Track_sector == 0) {  search_in_sectors[0] = 0; search_in_sectors[1] = 1; search_in_sectors[2] = 17;}
+            else { search_in_sectors[0] = Track_sector - 1; search_in_sectors[1] = Track_sector; search_in_sectors[2] = Track_sector + 1;}
+
+            // clear tracklet buffer
+            TRD_TPC_Track_GNN -> clearTrackletList();
+
+            for(Int_t i_tracklet=0; i_tracklet < NumTracklets; i_tracklet++){
+
+                TRD_ST_Tracklet = TRD_ST_Event    -> getTracklet(i_tracklet);
+                TV3_offset      = TRD_ST_Tracklet -> get_TV3_offset();
+                TV3_offset_local = TRD_ST_Tracklet -> get_TV3_offset();
+                TV3_dir         = TRD_ST_Tracklet -> get_TV3_dir();
+                TV3_dir_local   = TRD_ST_Tracklet -> get_TV3_dir();
+                i_det           = TRD_ST_Tracklet -> get_TRD_det();
+
+                Int_t i_sector = (Int_t)(i_det / 30); // from 0 to 17
+                Int_t i_stack  = (Int_t)(i_det % 30/6); // from 0 to 4
+                Int_t i_layer  = i_det % 6; // from 0 to 5 
+                //printf("layer, stack, sector: %i, %i, %i", i_sector, i_stack, i_layer);
+
+                // rotate direction vector and offset into local coordinate system (track incidence of TPC-Track as reference point)
+                TV3_offset_local.RotateZ((Double_t)(-1 * (2 * Track_sector + 1) * TMath::Pi() / 18));
+                TV3_dir_local.RotateZ((Double_t)(-1 * (2 * Track_sector + 1) * TMath::Pi() / 18));
+               
+                
+                if (!(i_sector == search_in_sectors[0] || i_sector == search_in_sectors[1] || i_sector == search_in_sectors[2])) continue;
+
+                if(TV3_offset.Mag() > 1000.0) continue;
+
+                Float_t PathA;
+                Float_t d_xy;
+                Float_t d_z;
+                new_helix -> setHelix(Helix_params[0], Helix_params[1], Helix_params[2], Helix_params[3], Helix_params[4], Helix_params[5]);
+            
+                std::pair<Float_t, Float_t> distance = fHelixAtoPointdca_xy_z(TV3_offset, new_helix, PathA, d_xy, d_z);
+                Float_t distance_xy = distance.first;
+                Float_t distance_z = distance.second;
+                
+                Float_t comp_dist = TMath::Sqrt(TMath::Power(distance_xy,2) + TMath::Power(distance_z,2));
+                //printf("Number_tracklet: %i, distance xy: %f, distance z: %f, cylinder radius: %f\n", i_tracklet, distance_xy, distance_z, comp_dist);
+                // cut value around TPC-track dca
+                if (apply_Helix_cut) {if (comp_dist > 30){continue;}}
+
+                //TODO: Switch coordinates to local system?
+                if (write_out_bckg || write_out_sign){
+                    new_tracklet = TRD_TPC_Track_GNN -> createTracklet();
+                    new_tracklet -> setdisttoTPCtrack(comp_dist);
+                    new_tracklet -> set_TV3_offset(TV3_offset);
+                    new_tracklet -> set_TV3_offset_local(TV3_offset_local);
+                    new_tracklet -> set_TV3_dir(TV3_dir);
+                    new_tracklet -> set_TV3_dir_local(TV3_dir_local);
+                    new_tracklet -> set_TRD_det(i_det);
+                    new_tracklet -> setTracklet_layer(i_layer);
+                    new_tracklet -> setTracklet_stack(i_stack);
+                    new_tracklet -> setTracklet_sector(i_sector);
+                }                
+
+#if defined(USEEVE)
+                //draw the tracklet, when it has passed the cuts
+                if(graphics && draw_tracklets)
+                {
+                vec_TEveLine_tracklets[i_layer].resize(N_tracklets_layers[i_layer]+1);
+                vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]] = new TEveLine();
+
+                vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]] ->SetNextPoint(TV3_offset[0],TV3_offset[1],TV3_offset[2]);
+                vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]] ->SetNextPoint(TV3_offset[0] + scale_length_vec*TV3_dir[0],TV3_offset[1] + scale_length_vec*TV3_dir[1],TV3_offset[2] + scale_length_vec*TV3_dir[2]);
+
+
+                //printf("i_tracklet: %d, radius: %4.3f, pos A: {%4.2f, %4.2f, %4.2f}, pos B: {%4.2f, %4.2f, %4.2f} \n",i_tracklet,radius,TV3_offset[0],TV3_offset[1],TV3_offset[2],TV3_offset[0] + scale_length_vec*TV3_dir[0],TV3_offset[1] + scale_length_vec*TV3_dir[1],TV3_offset[2] + scale_length_vec*TV3_dir[2]);
+
+                HistName = "TPC-tr: ";
+                HistName += Found_TPC_Tracks[i_track];
+                HistName += ", tracklet";
+                HistName += i_tracklet;
+                vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]]    ->SetName(HistName.Data());
+                vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]]    ->SetLineStyle(1);
+                vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]]    ->SetLineWidth(4);
+                vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]]    ->SetMainColor(color_layer[i_layer]);
+                if(TV3_dir.Mag() > 1.5) vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]]    ->SetMainColor(kBlue);
+                {
+                    if(graphics && draw_tracklets) gEve->AddElement(vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]]);
+                    }
+                }
+        N_tracklets_layers[i_layer]++;
+                }
+
+
+#endif
+            //Tree gets filled if flags activated
+            if(write_out_bckg){
+                Tree_Input_GNN_bckgr -> Fill();
+            }
+            else if(write_out_sign){
+                Tree_Input_GNN_sign -> Fill();
+            }
+        }
+    }
+}
+
+void Ali_TRD_ST_Analyze::DrawTrackletsAroundVerticesOfNuclearInt(Long64_t i_event, Int_t graphics, Int_t draw_tracklets, Int_t draw_vertex, Int_t draw_MC_tracks, Int_t apply_Helix_cut){
+
+    UShort_t NumTracks            = TRD_ST_Event ->getMCparticles();
+    Int_t    NumTracklets         = TRD_ST_Event ->getNumTracklets();
+    Int_t N_cand_found = 0;
+    Int_t Interactions_with_cut=0;
+    std::vector<Int_t> mother_part;
+    std::vector<Int_t> mothers_with_cut;    
+    
+    std::vector<std::vector<Float_t>> helix_params;
+    //container for vertices of daughter particles and the PDG code of the mother
+
+    std::vector<pair<std::vector <Double_t>, Int_t>> pos_vertices;
+
+    //std::vector<Double_t> x_pos_vertices;
+    //std::vector<Double_t> y_pos_vertices;
+    //std::vector<Double_t> z_pos_vertices;
+
+    std::map<Int_t, Int_t> index_to_PDG;
+    std::map<Int_t, Int_t> index_particle_to_track_number;
+
+
+    //map of candidates for nuclear interactions
+    std::map <Int_t, std::string> dict_mother = {{1000010020, "Deuteron"}, {1000010030, "Triton"}, {1000020030, "He3"}, {1000020040, "Alpha"}, {1000020050, "He5"}, {1000030050, "Li5"}, {-1000010020, "Anti-Deuteron"}, 
+    {-1000010030, "Anti-Triton"}, {-1000020030, "Anti-He3"}, {-1000020040, "Anti-alpha"}, {1000020050, "He5"}};
+
+    //pions as mothers for decay in TRD
+    //std::map <Int_t, std::string> dict_mother = {{211, "pi+"}, {-211, "pi-"}};
+
+    //map of outgoings in nuclear interactions
+    std::map<Int_t, std::string> dict_low = {{2212, "proton"}, {-2212, "anti-proton"}, {311, "K0"}, {321, "K+"}, {-321, "K-"}, {2112, "neutron"}, {-2112, "anti-neutron"}, {111, "pi0"}, {211, "pi+"}, {-211, "pi-"}};
+    std::map<Int_t, std::string>::iterator it;
+
+    //charges 
+    std::map<Int_t, Double_t> dict_charge = {{2212, 1.0}, {-2212, -1.0}, {311, 0}, {321, 1.0}, {-321, -1.0}, {2112, 0.0}, {-2112, 0.0}, {111, 0.0}, {211, 1.0}, {-211, -1.0}, {1000010020, 1.0}, {1000010030, 1.0},
+    {1000020030, 2.0}, {1000020040, 2.0}, {1000020050, 2.0}, {1000030050, 3.0}, {-1000010020, -1.0}, {-1000010030, -1.0}, {-1000020030, -2.0}, {-1000020040, -2.0}, {1000020050, 2.0} };
+
+    //find mother particles
+    for (Int_t i_track=0; i_track < NumTracks; i_track++){
+        TRD_MC_Track = TRD_ST_Event ->getMCparticle(i_track);
+
+        //get relevant params
+        TVector3       TV3_MC_particle_vertex = TRD_MC_Track ->get_TV3_particle_vertex();
+        TLorentzVector TLV_MC_particle        = TRD_MC_Track ->get_TLV_particle();
+        Int_t          MC_PDG_code            = TRD_MC_Track ->get_PDGcode();
+        Int_t          MC_index_mother        = TRD_MC_Track ->get_index_mother();
+        Int_t          MC_index_particle      = TRD_MC_Track ->get_index_particle();
+        Int_t          MC_N_daughters         = TRD_MC_Track ->get_N_daughters();
+        
+        index_to_PDG.insert(std::pair<int, int> (MC_index_particle, MC_PDG_code));
+        index_particle_to_track_number.insert(std::pair<int, int> (MC_index_particle, i_track));
+
+        it = dict_mother.find(MC_PDG_code);
+        if(TLV_MC_particle.P() > 0.1  && fabs(TLV_MC_particle.Eta()) < 0.85 && MC_N_daughters > 2 && it != dict_mother.end())
+        {
+            //printf("------------------------- \n");
+            //printf("Candidate found, MC_index_particle: %d, PDG-code: %d, Particle: %s, N_daughters: %d, Momentum: %4.3f\n", i_track, MC_PDG_code, dict_mother[MC_PDG_code].c_str(), MC_N_daughters, TLV_MC_particle.P());
+            mother_part.push_back(MC_index_particle);
+            N_cand_found++;
+            //printf("------------------------- \n");
+        }
+    }
+
+
+
+    //find daughter particles
+    for (Int_t i_track = 0; i_track < NumTracks; i_track++){
+        TRD_MC_Track = TRD_ST_Event ->getMCparticle(i_track);
+        
+
+        TVector3       TV3_MC_particle_vertex = TRD_MC_Track ->get_TV3_particle_vertex();
+        TLorentzVector TLV_MC_particle        = TRD_MC_Track ->get_TLV_particle();
+        Int_t          MC_PDG_code            = TRD_MC_Track ->get_PDGcode();
+        Int_t          MC_index_mother        = TRD_MC_Track ->get_index_mother();
+        Int_t          MC_index_particle      = TRD_MC_Track ->get_index_particle();
+        Int_t          MC_N_daughters         = TRD_MC_Track ->get_N_daughters();
+        Double_t       radius = TMath::Sqrt( TMath::Power(TV3_MC_particle_vertex[0],2) + TMath::Power(TV3_MC_particle_vertex[1],2) );  
+        
+        
+       
+        
+        // find daughters of known mothers (do not fullfill special requirements regarding the type of particle)
+        
+
+        if (TLV_MC_particle.P()>0.1 && fabs(TLV_MC_particle.Eta()) < 0.85 && std::find(mother_part.begin(), mother_part.end(), MC_index_mother) != mother_part.end())
+        {   
+
+            //printf("\n");
+            //printf("Daughter of MC_index: %d, PDG-Code: %d, Index of Daughter: %d, Particle: %s, Momentum of Daughter: %4.3f, Vertex (X,Y,Z):(%4.3f, %4.3f, %4.3f), Radius: %4.3f\n", MC_index_mother, MC_PDG_code, MC_index_particle, 
+            //dict_low[MC_PDG_code].c_str(), TLV_MC_particle.P(), TV3_MC_particle_vertex.X(), TV3_MC_particle_vertex.Y(), TV3_MC_particle_vertex.Z(), radius);
+
+            // radius cuts to specify candidates that are in the respective TRD layers
+            
+            if (radius > 270 && radius < 310){
+                    //printf("\n");
+                    //printf("Daughter of MC_index: %d, Mother-particle: %s, PDG-Code: %d, Index of Daughter: %d, Particle: %s, Momentum of Daughter: %4.3f, Vertex (X,Y,Z):(%4.3f, %4.3f, %4.3f), Radius: %4.3f\n", MC_index_mother, dict_mother[index_to_PDG[MC_index_mother]].c_str(), MC_PDG_code, MC_index_particle, 
+                    //dict_low[MC_PDG_code].c_str(), TLV_MC_particle.P(), TV3_MC_particle_vertex.X(), TV3_MC_particle_vertex.Y(), TV3_MC_particle_vertex.Z(), radius);
+                    
+                    //get PDG code of mother particle
+                    Int_t MC_PDG_Code_mother = index_to_PDG[MC_index_mother];
+                    //daughter creation vertex
+                    std::vector<Double_t> pos = {TV3_MC_particle_vertex.X(), TV3_MC_particle_vertex.Y(), TV3_MC_particle_vertex.Z()};
+                    //push back tuple of daughter creation vertex and PDG code of mother
+                    pos_vertices.push_back(std::make_pair(pos, MC_PDG_Code_mother));
+                    // push back relevant mothers for track plotting later
+                    mothers_with_cut.push_back(MC_index_mother);
+                    // draw helices of daughter particles (require charge to be unequal to 0)
+#if defined(USEEVE)
+                    if (draw_MC_tracks && (dict_charge[MC_PDG_code]>0 || dict_charge[MC_PDG_code]<0)){
+                        vector<Double_t> fhelix = Get_Helix_params_from_kine(TLV_MC_particle, TV3_MC_particle_vertex, (-1.0)*dict_charge[MC_PDG_code]);
+                        vector<Float_t> params = {(Float_t) fhelix[0], (Float_t) fhelix[1], (Float_t) fhelix[2], (Float_t) fhelix[3], (Float_t) fhelix[4], (Float_t) fhelix[5]};
+                        //helix_params.push_back(params);
+                        TRD_ST_TPC_Track_MC -> setHelix(fhelix[0], fhelix[1], fhelix[2], fhelix[3], fhelix[4], fhelix[5]);
+                        //red color for daughters
+                        Draw_MC_track(i_MC_draw_track, kRed, 2, 500.0);
+                        i_MC_draw_track++;
+                    }
+#endif
+                    //x_pos_vertices.push_back(TV3_MC_particle_vertex.X());
+                    //y_pos_vertices.push_back(TV3_MC_particle_vertex.Y());
+                    //z_pos_vertices.push_back(TV3_MC_particle_vertex.Z());
+                    //PDG_codes_mother.push_back(MC_PDG_Code_mother);
+                    //printf("passed once");
+            }
+            
+        }
+    }
+
+    if ((Int_t) mothers_with_cut.size() > 0){
+        std::sort(mothers_with_cut.begin(), mothers_with_cut.end());
+        mothers_with_cut.erase(std::unique(mothers_with_cut.begin(), mothers_with_cut.end()), mothers_with_cut.end());
+
+        for(Int_t i=0; i < (Int_t) mothers_with_cut.size(); i++){
+            TRD_MC_Track_2 = TRD_ST_Event -> getMCparticle(index_particle_to_track_number[mothers_with_cut[i]]);
+            TVector3       TV3_MC_particle_vertex_mother = TRD_MC_Track_2 -> get_TV3_particle_vertex();
+            TLorentzVector TLV_MC_particle_mother        = TRD_MC_Track_2 -> get_TLV_particle();
+            Int_t MC_PDG_Code_mother = index_to_PDG[mothers_with_cut[i]];
+#if defined(USEEVE)
+            if(draw_MC_tracks && (dict_charge[MC_PDG_Code_mother]>0 || dict_charge[MC_PDG_Code_mother]<0)){
+                vector<Double_t> fhelix = Get_Helix_params_from_kine(TLV_MC_particle_mother, TV3_MC_particle_vertex_mother, (-1.0)*dict_charge[MC_PDG_Code_mother]);
+                vector<Float_t> params = {(Float_t) fhelix[0], (Float_t) fhelix[1], (Float_t) fhelix[2], (Float_t) fhelix[3], (Float_t) fhelix[4], (Float_t) fhelix[5]};
+                helix_params.push_back(params);
+                TRD_ST_TPC_Track_MC -> setHelix(fhelix[0], fhelix[1], fhelix[2], fhelix[3], fhelix[4], fhelix[5]);
+                // yellow color for mothers
+                Draw_MC_track(i_MC_draw_track, kYellow, 2, 500.0);
+                i_MC_draw_track++;
+            }
+        }
+    }
+#endif
+    
+
+    if ((Int_t) pos_vertices.size() > 0){
+    std::sort(pos_vertices.begin(), pos_vertices.end());
+    pos_vertices.erase(std::unique(pos_vertices.begin(), pos_vertices.end()), pos_vertices.end());
+    }
+    
+    
+    std::cout << "pos vertices size: " << pos_vertices.size() << '\n';
+
+    
+
+    //plot tracklets and vertices
+    
+    
+
+    TVector3 TV3_offset;
+    TVector3 TV3_offset_local;
+    TVector3 TV3_dir;
+    Int_t    i_det, trk_index;
+
+
+    for(Int_t i_pos=0; i_pos < (Int_t) pos_vertices.size(); i_pos++){
+        Int_t layer_of_Vertex_in_TRD;
+        Double_t Radial_pos_vertex = TMath::Sqrt( TMath::Power(pos_vertices[i_pos].first[0],2) + TMath::Power(pos_vertices[i_pos].first[1],2) ); 
+        if (Radial_pos_vertex < 296)  layer_of_Vertex_in_TRD = 0;
+        else if (Radial_pos_vertex > 297 && Radial_pos_vertex < 306) layer_of_Vertex_in_TRD = 1;
+        else if (Radial_pos_vertex > 310 && Radial_pos_vertex < 320) layer_of_Vertex_in_TRD = 2;
+        //printf("(X,Y,Z): %f, %f, %f, mother_PDG_code: %d\n", pos_vertices[i_pos].first[0], pos_vertices[i_pos].first[1], pos_vertices[i_pos].first[2], pos_vertices[i_pos].second);
+
+#if defined(USEEVE)
+        //plot vertex of nuclear interaction
+        TEveP_nuclear_vertex_positions = new TEvePointSet();
+        HistName = "Vertex: Decaying ";
+        HistName += dict_mother[pos_vertices[i_pos].second];
+        if (graphics && draw_vertex)
+        {
+            TEveP_nuclear_vertex_positions -> SetNextPoint(pos_vertices[i_pos].first[0], pos_vertices[i_pos].first[1], pos_vertices[i_pos].first[2]);
+            TEveP_nuclear_vertex_positions -> SetName(HistName.Data());
+            TEveP_nuclear_vertex_positions -> SetMarkerSize(3);
+            TEveP_nuclear_vertex_positions -> SetMarkerStyle(20);
+            TEveP_nuclear_vertex_positions -> SetMarkerColor(kRed); 
+            gEve -> AddElement(TEveP_nuclear_vertex_positions);
+        }   
+               
+#endif 
+
+
+
+
+    for(Int_t i_tracklet=0; i_tracklet < NumTracklets; i_tracklet++){
+
+        TVector3 nucl_int_vertex_local(pos_vertices[i_pos].first[0], pos_vertices[i_pos].first[1], pos_vertices[i_pos].first[2]);
+        TRD_ST_Tracklet = TRD_ST_Event    -> getTracklet(i_tracklet);
+        TV3_offset      = TRD_ST_Tracklet -> get_TV3_offset();
+        TV3_offset_local = TRD_ST_Tracklet -> get_TV3_offset();
+        TV3_dir         = TRD_ST_Tracklet -> get_TV3_dir();
+        i_det           = TRD_ST_Tracklet -> get_TRD_det();
+        trk_index       = TRD_ST_Tracklet -> get_TRD_index();
+
+        Int_t i_sector = (Int_t)(i_det / 30); // from 0 to 17
+        Int_t i_stack  = (Int_t)(i_det % 30/6); // from 0 to 4
+        Int_t i_layer  = i_det % 6; // from 0 to 5
+
+        // throw away tracklets with too large offset
+        if(TV3_offset.Mag() > 1000.0) continue;
+
+        /*
+        // first selection cut: ball of radius some_size
+        Double_t rel_x = pos_vertices[i_pos].first[0] - TV3_offset[0];
+        Double_t rel_y = pos_vertices[i_pos].first[1] - TV3_offset[1];
+        Double_t rel_z = pos_vertices[i_pos].first[2] - TV3_offset[2];
+        Double_t rel_radius = TMath::Sqrt(TMath::Power(rel_x,2) + TMath::Power(rel_y,2) + TMath::Power(rel_z, 2));
+        Double_t some_size = 100;
+        // exclude elements not contained in the desired ball
+        if (rel_radius > some_size){
+            continue;
+        }
+        
+        //apply layer dependent cuts respecting some kind of cone structure
+        
+        Int_t Difference_Layer = fabs(i_layer - layer_of_Vertex_in_TRD);
+        //printf("Difference_Layer: %i", Difference_Layer );
+
+        // go to local coordinate system (cf. Kalman Filter)
+        // for nuclear interaction vertex 
+        nucl_int_vertex_local.RotateZ((Double_t)(-1 * (2 * i_sector + 1) * TMath::Pi() / 18));
+
+        // for tracklet
+        TV3_offset_local.RotateZ((Double_t)((-1 * (2 * i_sector + 1) * TMath::Pi() / 18)));
+
+
+        //printf("Local coordinate system: (X,Y,Z):(%f, %f, %f), Global coordinate system: (X,Y,Z): (%f, %f, %f)\n ", TV3_offset_local[0], TV3_offset_local[1], TV3_offset_local[2], 
+        //TV3_offset[0], TV3_offset[1], TV3_offset[2]);
+        
+        if (Difference_Layer == 0) some_size = 40;
+        else if (Difference_Layer == 1) some_size = 50;
+        else if (Difference_Layer == 2) some_size = 60;
+        else if (Difference_Layer == 3) some_size = 70;
+        else if (Difference_Layer == 4) some_size = 80;
+        else if (Difference_Layer == 5) some_size = 90;
+
+        TVector3 difference_vector = TV3_offset_local - nucl_int_vertex_local;
+        Double_t radius_local = TMath::Sqrt( TMath::Power(difference_vector.X(), 2) + TMath::Power(difference_vector.Y(),2) + TMath::Power(difference_vector.Z(), 2));
+        //printf("Lokaler Radius:%f \n",radius_local );
+        if (radius_local > some_size){
+            continue;
+        }
+        
+        
+
+        printf("Passed first cut");
+        Double_t closest_distance = 10000;
+        for (Int_t j=0; j < (Int_t) helix_params.size(); j++){
+            Float_t new_distance = distance_circ_point_2D_new(TV3_offset[0], TV3_offset[1], (Double_t) helix_params[j][5], (Double_t) helix_params[j][0], (Double_t) 1/helix_params[j][4]);
+            if (new_distance < closest_distance){
+                closest_distance = new_distance;
+                //printf("closest distance: %f", closest_distance);
+            } 
+        }
+
+        if (closest_distance > 8){
+            continue;
+        }
+        
+        printf("Passed second cut");
+
+        */
+       
+        Double_t distance_xy = 10000;
+        Double_t distance_z = 10000;
+        Double_t tot_dist = 10000;
+        for (Int_t j=0; j < (Int_t) helix_params.size(); j++){
+            Float_t PathA;
+            Float_t d_xy;
+            Float_t d_z;
+            new_helix -> setHelix(helix_params[j][0], helix_params[j][1], helix_params[j][2], helix_params[j][3], helix_params[j][4], helix_params[j][5]);
+            
+            std::pair<Float_t, Float_t> distance = fHelixAtoPointdca_xy_z(TV3_offset, new_helix, PathA, d_xy, d_z);
+            // higher emphasis on xy-cut (is preferred because of better resolution)
+            if (distance.first < distance_xy){
+                distance_xy = distance.first;
+                distance_z = distance.second;
+            } 
+        }
+        Float_t comp_dist = TMath::Sqrt(TMath::Power(distance_xy,2) + TMath::Power(distance_z,2));
+        //printf("Number_tracklet: %i, distance xy: %f, distance z: %f, cylinder radius: %f\n", i_tracklet, distance_xy, distance_z, comp_dist);
+        if (apply_Helix_cut){
+        if (comp_dist > 30){
+            continue;
+        }
+        
+    
+       }
+        
+        
+#if defined(USEEVE)
+        //draw the tracklet, when it has passed the cuts
+        if(graphics && draw_tracklets)
+        {
+        vec_TEveLine_tracklets[i_layer].resize(N_tracklets_layers[i_layer]+1);
+        vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]] = new TEveLine();
+
+        vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]] ->SetNextPoint(TV3_offset[0],TV3_offset[1],TV3_offset[2]);
+        vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]] ->SetNextPoint(TV3_offset[0] + scale_length_vec*TV3_dir[0],TV3_offset[1] + scale_length_vec*TV3_dir[1],TV3_offset[2] + scale_length_vec*TV3_dir[2]);
+
+
+        //printf("i_tracklet: %d, radius: %4.3f, pos A: {%4.2f, %4.2f, %4.2f}, pos B: {%4.2f, %4.2f, %4.2f} \n",i_tracklet,radius,TV3_offset[0],TV3_offset[1],TV3_offset[2],TV3_offset[0] + scale_length_vec*TV3_dir[0],TV3_offset[1] + scale_length_vec*TV3_dir[1],TV3_offset[2] + scale_length_vec*TV3_dir[2]);
+
+        HistName = "tracklet ";
+        HistName += i_tracklet;
+        vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]]    ->SetName(HistName.Data());
+        vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]]    ->SetLineStyle(1);
+        vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]]    ->SetLineWidth(4);
+        vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]]    ->SetMainColor(color_layer[i_layer]);
+        if(TV3_dir.Mag() > 1.5) vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]]    ->SetMainColor(kBlue);
+        {
+            if(graphics && draw_tracklets) gEve->AddElement(vec_TEveLine_tracklets[i_layer][N_tracklets_layers[i_layer]]);
+            }
+        }
+        N_tracklets_layers[i_layer]++;
+        }
+
+#endif
+        
+    }
+
+
+}
+
+void Ali_TRD_ST_Analyze::DrawHistogram(){
+
+    TCanvas* can_nuclei = new TCanvas("can_nuclei","can_nuclei", 10, 10, 500, 500);
+    can_nuclei -> cd();
+    h2D_nuclei_vertex_XY -> Draw("");
+
+    TCanvas* can_nuclei_rad = new TCanvas("can_nuclei_rad", "can_nuclei_rad", 10, 10, 500, 500);
+    can_nuclei_rad -> cd();
+    h1D_nuclei_vertex_R -> Draw("HIST");
+}
 
 //----------------------------------------------------------------------------------------
 Int_t Ali_TRD_ST_Analyze::Draw_event(Long64_t i_event, Int_t graphics, Int_t draw_tracks, Int_t draw_tracklets, Double_t track_path, Int_t draw_digits)
@@ -5099,6 +6035,12 @@ void Ali_TRD_ST_Analyze::Write()
     Tree_TRD_Self_Event_out -> Write();
 
     outputfile ->cd();
+
+    // write background data
+    Tree_Input_GNN_bckgr -> Write();
+
+    // write signal data
+    Tree_Input_GNN_sign -> Write();
 
 
     //NT_secondary_vertices         ->AutoSave("SaveSelf");
