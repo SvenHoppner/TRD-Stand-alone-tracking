@@ -557,7 +557,7 @@ void Ali_TRD_ST_Analyze::fHelixAtoPointdca(TVector3 space_vec, Ali_Helix* helixA
 //----------------------------------------------------------------------------------------
 
 
-void Ali_TRD_ST_Analyze::fHelixAtoPointdca_xy_z(TVector3 space_vec, Ali_Helix* helixA, Float_t &pathA, Float_t &dcaAB_xy,Float_t &dcaAB_z)
+std::pair<Float_t, Float_t> Ali_TRD_ST_Analyze::fHelixAtoPointdca_xy_z(TVector3 space_vec, Ali_Helix* helixA, Float_t &pathA, Float_t &dcaAB_xy,Float_t &dcaAB_z)
 {
     // V1.1
     Float_t pA[2] = {100.0,-100.0}; // the two start values for pathB, 0.0 is the origin of the helix at the first measured point
@@ -626,7 +626,7 @@ void Ali_TRD_ST_Analyze::fHelixAtoPointdca_xy_z(TVector3 space_vec, Ali_Helix* h
             testA.SetXYZ(helix_point[0],helix_point[1],helix_point[2]);
             testA_xy.SetXYZ(helix_point[0],helix_point[1],0.0);
             testA_z.SetXYZ(0.0,0.0,helix_point[2]);
-
+            
             distarray[1] = (testA-space_vec).Mag();
             distarray_xy[1] = (testA_xy-space_vec_xy).Mag(); // dca between helixA and helixB
             distarray_z [1] = (testA_z-space_vec_z).Mag(); // dca between helixA and helixB
@@ -647,10 +647,10 @@ void Ali_TRD_ST_Analyze::fHelixAtoPointdca_xy_z(TVector3 space_vec, Ali_Helix* h
         dcaAB_xy = distarray_xy[1];
         dcaAB_z = distarray_z[1];
     }
+    return std::make_pair(dcaAB_xy, dcaAB_z);
     //cout << "pathA = " << pathA << ", dcaAB = " << dcaAB << endl;
 }
 //----------------------------------------------------------------------------------------
-
 
 //----------------------------------------------------------------------------------------
 Int_t Ali_TRD_ST_Analyze::fCross_points_Circles(Double_t x1, Double_t y1, Double_t r1, Double_t x2, Double_t y2, Double_t r2,

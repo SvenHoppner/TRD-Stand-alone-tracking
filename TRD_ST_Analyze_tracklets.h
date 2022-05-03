@@ -98,6 +98,7 @@ private:
     Ali_TRD_ST_TPC_Track* TRD_ST_TPC_Track;
     Ali_TRD_ST_Event*     TRD_ST_Event;
     Ali_MC_particle*      TRD_MC_Track;
+    Ali_MC_particle*      TRD_MC_Track_2;
     Ali_MC_particle*      TRD_MC_Track_pi0;
     Ali_MC_particle*      TRD_MC_Track_gammas[2];
     Ali_MC_particle*      TRD_MC_Track_electrons[4];
@@ -149,6 +150,9 @@ private:
     vector<TH1D*> vec_th1d_TRD_layer_radii_det;
     TH1D* th1d_offset_diff;
     TH1D* th1d_angle_diff;
+    TH2D* h2D_nuclei_vertex_XY;
+    TH1D* h1D_nuclei_vertex_R;
+
 
     Double_t EventVertexX = -999.0;
     Double_t EventVertexY = -999.0;
@@ -207,6 +211,7 @@ private:
 #endif
 
     Int_t N_tracklets_layers[6] = {0};
+    Double_t N_NI_radius_cut = 0;
     Double_t scale_length_vec = -10.0;
     Int_t track_color    = kAzure-2;
     Int_t color_layer_match[6] = {kRed,kGreen,kCyan,kYellow,kPink-3,kOrange+8};
@@ -236,6 +241,7 @@ private:
     vector<Ali_Helix*> vec_helices_TRD;
     vector<Ali_Helix*> vec_helices_TPC;
     Ali_Helix* TPC_single_helix;
+    Ali_Helix* new_helix;
     vector< vector<Ali_TRD_ST_Tracklets*> > vec_kalman_TRD_trackets;
 
     TFile* layer_radii_file;
@@ -369,8 +375,7 @@ public:
     void Draw_Save_Gain_calib();
 
     TVector3 fDCA_Helix_Estimate_xy_z(Ali_Helix* helixA, Ali_Helix* helixB, Float_t &pathA, Float_t &pathB, Float_t &dcaAB_xy, Float_t &dcaAB_z);
-    void fHelixAtoPointdca_xy_z(TVector3 space_vec, Ali_Helix* helixA, Float_t &pathA, Float_t &dcaAB_xy,Float_t &dcaAB_z);
-
+    std::pair<Float_t, Float_t> fHelixAtoPointdca_xy_z(TVector3 space_vec, Ali_Helix* helixA, Float_t &pathA, Float_t &dcaAB_xy, Float_t &dcaAB_z);
     ClassDef(Ali_TRD_ST_Analyze, 1)
 };
 //----------------------------------------------------------------------------------------
