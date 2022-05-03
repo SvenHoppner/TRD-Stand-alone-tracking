@@ -274,8 +274,9 @@ private:
     TH1D* h1D_invariant_mass_S;     //histogram for plotting the invariant mass of the S particle     
     TH1D* h1D_invariant_mass_L;     //histogram for plotting the invariant mass of the L particle 
     TH1D* h1D_invariant_mass_K;     //histogram for plotting the invariant mass of the K particle
-    std::map<Int_t, Int_t> index_particle_to_track_number; //map of particle index to track number
-    
+    std::map<Int_t, Int_t> index_particle_to_track_number; //map of particle index to track number for mc tracks
+    std::map<Int_t, Int_t> map_matched_tpc_to_mc;
+    std::map<Int_t, Int_t> map_matched_mc_to_tpc;
     
     //TFile* out_gain;
 
@@ -329,7 +330,8 @@ public:
     void Draw_MC_track(Int_t i_track, Int_t color, Double_t line_width, Double_t max_path);
     void Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t color, Double_t line_width, Double_t max_path, Int_t i_track);
     Bool_t MCComesFromSexaquark(Ali_MC_particle * mcPart);
-  
+    void Match_TPC_to_MC_Data();
+
 
     TH1D* get_layer_radii_hist() {return h_layer_radii_det;}
     Long64_t get_N_Events() {return N_Events;}

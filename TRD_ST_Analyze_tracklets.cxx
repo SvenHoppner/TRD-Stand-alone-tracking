@@ -3505,6 +3505,10 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant
 {
     // Scan Monte Carlo event for interesting topology
     //printf("Ali_TRD_ST_Analyze::Scan_MC_Event \n");
+
+
+    Match_TPC_to_MC_Data();
+
     UShort_t NumTracks            = TRD_ST_Event ->getMCparticles(); // number of tracks in this event
     Int_t arr_index_daughters_pi0[5]   = {-1};
     Int_t arr_index_daughters_gamma[5] = {-1};
@@ -3721,7 +3725,6 @@ void Ali_TRD_ST_Analyze::Draw_Inv_Mass_histogram(){
     can_invariant_mass_K -> cd();
     h1D_invariant_mass_K -> Draw("HIST");
 
-
 }
 //----------------------------------------------------------------------------------------
 
@@ -3751,6 +3754,96 @@ void Ali_TRD_ST_Analyze::Draw_Inv_Mass_histogram(){
     return isPrimary || isDaughterOfPrimary;
   }
 
+//----------------------------------------------------------------------------------------
+
+
+
+
+//----------------------------------------------------------------------------------------
+void Ali_TRD_ST_Analyze::Match_TPC_to_MC_Data()
+{
+    map_matched_tpc_to_mc.clear();
+    map_matched_mc_to_tpc.clear();
+
+    // Event information (more data members available, see Ali_TRD_ST_Event class definition)
+    UShort_t NumTPCTracks           = TRD_ST_Event ->getNumTracks(); // number of tracks in this event
+    Int_t    NumTRDTracklets        = TRD_ST_Event ->getNumTracklets();
+    UShort_t NumMCTracks            = TRD_ST_Event ->getMCparticles(); // number of tracks in this event
+    
+    std::map<Int_t, Double_t> PDG_codes_charge =
+    {{11,-1.0},{-11,1.0},{13,-1.0},{-13,1.0},{22,0},{111,0},{113,0},{130,0},{211,1.0},{-211,-1.0},{221,0},{223,-1.0},
+    {310,0},{321,1.0},{-321,-1.0},{331,0},{-331,0},{2112,0},{-2112,0},{2212,1.0},{-2212,-1.0},
+    {3112,-1.0},{-3112,1.0},{-3122,0},{3122,0},{3222,1.0},{3212,0},{-3212,0}};
+
+    // TPC track loop
+    for(Int_t i_track_tpc = 0; i_track_tpc < NumTPCTracks; i_track_tpc++)
+    {   
+
+        TRD_ST_TPC_Track = TRD_ST_Event ->getTrack(i_track_tpc);
+
+        Float_t Helixparams_tpc[6];
+        Float_t Helixparams_cuts[6];
+
+        //1/ sigma^2 
+        Helixparams_cuts[0] = 1./100;
+        Helixparams_cuts[1] = 1./300;
+        Helixparams_cuts[2] = 1./500;
+        Helixparams_cuts[3] = 500;
+        Helixparams_cuts[4] = 5000;
+        Helixparams_cuts[5] = 1./100;
+        
+        Float_t Chi_2_best = 1;
+
+        for(Int_t i=0; i<6; i++){
+            Helixparams_tpc[i] = TRD_ST_TPC_Track ->getHelix_param(i) ;
+            
+        }
+
+        Int_t best_match = -1;
+        
+        for(Int_t i_track_mc = 0; i_track_mc < NumMCTracks; i_track_mc++)
+        {   
+            //printf("startet matching mc loop %d, %d\n",i_track_tpc,i_track_mc);
+        
+                            TRD_MC_Track            = TRD_ST_Event      ->getMCparticle(i_track_mc);
+            TLorentzVector  TLV_MC_particle         = TRD_MC_Track      ->get_TLV_particle();
+            TVector3        TV3_MC_particle_vertex  = TRD_MC_Track      ->get_TV3_particle_vertex();
+            Int_t           MC_PDG_code             = TRD_MC_Track      ->get_PDGcode();
+            Int_t           MC_index_particle       = TRD_MC_Track      ->get_index_particle();
+            
+            if(TLV_MC_particle.P() < 0.01) continue;    
+
+            //printf("got mc data %d, %d\n",i_track_tpc,i_track_mc);
+        
+            vector<Double_t> fhelix = Get_Helix_params_from_kine(TLV_MC_particle,TV3_MC_particle_vertex,PDG_codes_charge[MC_PDG_code]);
+            Float_t Helixparams_diff[6];
+            for(Int_t i=0; i<6; i++){
+                Helixparams_diff[i]=  TMath::Abs((Float_t)fhelix[i]-Helixparams_tpc[i]); 
+            }
+            Float_t Chi_2 = 0;
+            for (int i = 0;i<6 ;i++){ Chi_2 += 0.2* TMath::Power(Helixparams_diff[i],2)*Helixparams_cuts[i];}
+            
+            printf("tpc: %d, mc: %d, Chi_2: %f\n",i_track_tpc,i_track_mc,Chi_2);
+            if(i_track_tpc==2 && i_track_mc==3)
+            {
+               for (int i = 0;i<6 ;i++){ printf("helix_diff: %f, %f, %f\n",Helixparams_diff[i],TMath::Power(Helixparams_diff[i],2),Helixparams_cuts[i]);}
+               
+            }
+            if(Chi_2<Chi_2_best)
+            {
+                Chi_2_best = Chi_2;
+                best_match = MC_index_particle;
+            }
+
+        }
+        if(best_match!= -1){
+            map_matched_tpc_to_mc.insert(std::pair<int, int> (i_track_tpc, best_match));
+            map_matched_mc_to_tpc.insert(std::pair<int, int> (best_match, i_track_tpc));
+            
+        }
+
+    }
+}    
 //----------------------------------------------------------------------------------------
 
 
@@ -3872,7 +3965,7 @@ void Ali_TRD_ST_Analyze::Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t
                 vec_TPL3D_helix_MC[i_track]        ->SetNextPoint(track_pos[0],track_pos[1],track_pos[2]);
         #endif
 
-        continue_loop = track_path < 500 && dist_to_endvertex>= 10 && radius_helix <= 460.0 && fabs(track_pos[2]) <= 360.0 ;
+        continue_loop = track_path < 500 && dist_to_endvertex>= 1 && radius_helix <= 460.0 && fabs(track_pos[2]) <= 360.0 ;
 
         track_pos[0] += velo_mc[0];
         track_pos[1] += velo_mc[1];
@@ -3915,6 +4008,8 @@ void Ali_TRD_ST_Analyze::Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t
 #if defined(USEEVE)
     HistName = "track ";
     HistName += i_track;
+    HistName += " ";
+    HistName += MC_index_particle;
     HistName += " ";
     HistName += PDG_codes_names[MC_PDG_code];
     vec_TPL3D_helix_MC[i_track]    ->SetName(HistName.Data());
@@ -4138,7 +4233,7 @@ Int_t Ali_TRD_ST_Analyze::Draw_event(Long64_t i_event, Int_t graphics, Int_t dra
         {
             for(Int_t i_time = 0; i_time < 30; i_time++)
             {
-                if(i_tracklet >= 0) printf("  --> i_time: %d, ADC: %4.2f \n",i_time,TRD_ST_Tracklet ->get_ADC_val(i_time));
+                //if(i_tracklet >= 0) printf("  --> i_time: %d, ADC: %4.2f \n",i_time,TRD_ST_Tracklet ->get_ADC_val(i_time));
             }
         }
 
