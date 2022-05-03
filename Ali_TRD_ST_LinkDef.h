@@ -8,6 +8,8 @@
 #pragma link C++ class Ali_TRD_ST_TPC_Track+;
 #pragma link C++ class Ali_TRD_ST_Event+;
 #pragma link C++ class Ali_Helix+;
+#pragma link C++ class Ali_TRD_ST_TPC_Track_GNN+;
+#pragma link C++ class Ali_TRD_ST_Tracklets_for_GNN+;
 
 
 #endif

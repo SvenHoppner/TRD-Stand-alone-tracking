@@ -54,6 +54,81 @@ public:
 };
 //----------------------------------------------------------------------------------------
 
+class Ali_TRD_ST_Tracklets_for_GNN : public TObject
+{
+private:
+    TVector3 TV3_offset; //
+    TVector3 TV3_offset_local;
+    TVector3 TV3_dir;
+    TVector3 TV3_dir_local;
+    Int_t    TRD_det;
+    Int_t    tracklet_sector;
+    Int_t    tracklet_stack;
+    Int_t    tracklet_layer;
+    Float_t    calculated_dist_to_TPC_track;
+    //Double_t ADC_val[30]; //
+    //UShort_t TPC_match;
+    //Int_t    n_tracklets_around;
+    //Double_t min_dist_to_next_trkl; //
+    //Int_t    index;
+
+
+public:
+    Ali_TRD_ST_Tracklets_for_GNN() :
+        TV3_offset(), TV3_dir(), TV3_offset_local(), TV3_dir_local(), tracklet_sector(-1), tracklet_stack(-1), tracklet_layer(-1), TRD_det(-4) //ADC_val(),TPC_match(0),n_tracklets_around(0),min_dist_to_next_trkl(-5.0), index(0), 
+    {}
+        ~Ali_TRD_ST_Tracklets_for_GNN(){}
+
+        void       set_TV3_offset(TVector3 TV3_offset_in)           { TV3_offset = TV3_offset_in;    }
+        TVector3   get_TV3_offset() const                           { return TV3_offset;             }
+
+        void       set_TV3_offset_local(TVector3 TV3_offset_in)           { TV3_offset_local = TV3_offset_in;    }
+        TVector3   get_TV3_offset_local() const                           { return TV3_offset_local;             }
+
+        void       set_TV3_dir(TVector3 TV3_dir_in)                 { TV3_dir = TV3_dir_in;          }
+        TVector3   get_TV3_dir() const                              { return TV3_dir;                }
+
+        void       set_TV3_dir_local(TVector3 TV3_dir_in)                 { TV3_dir_local = TV3_dir_in;          }
+        TVector3   get_TV3_dir_local() const                              { return TV3_dir_local;                }
+
+        void       set_TRD_det(Int_t TRD_det_in)                    { TRD_det = TRD_det_in;          }
+        Int_t      get_TRD_det() const                              { return TRD_det;                }
+
+        void       setTracklet_layer(Int_t layer)          { tracklet_layer = layer;}
+        Int_t      getTracklet_layer() const                {return tracklet_layer;}
+
+        void       setTracklet_sector(Int_t sector)          { tracklet_sector = sector;}
+        Int_t      getTracklet_sector() const                {return tracklet_sector;}
+
+        void       setTracklet_stack(Int_t stack)          { tracklet_stack = stack;}
+        Int_t      getTracklet_stack() const                {return tracklet_stack;}
+
+        void       setdisttoTPCtrack(Float_t dist)         {calculated_dist_to_TPC_track = dist;}
+        float_t    getdisttoTPCtrack()                      {return calculated_dist_to_TPC_track;}
+
+        /*
+
+        void       set_ADC_val(Int_t time_bin, Double_t ADC_value)  { ADC_val[time_bin] = ADC_value; }
+        Double_t   get_ADC_val(Int_t time_bin) const                { return ADC_val[time_bin];      }
+
+        
+
+        void       set_TPC_match(UShort_t TPC_match_in)             { TPC_match = TPC_match_in;      }
+        UShort_t   get_TPC_match() const      						{ return TPC_match;              }
+                
+        void       set_n_tracklets_around(Int_t n_tracklets_around_in)          { n_tracklets_around = n_tracklets_around_in;       }
+        Int_t      get_n_tracklets_around() const                               { return n_tracklets_around;                        }
+
+        void       set_min_dist_to_next_trkl(Double_t min_dist_to_next_trkl_in) { min_dist_to_next_trkl = min_dist_to_next_trkl_in; }
+        Double_t   get_min_dist_to_next_trkl() const                            { return min_dist_to_next_trkl;                     }
+
+        void       set_TRD_index(Int_t TRD_IND_in)                   { index = TRD_IND_in;          }
+        Int_t      get_TRD_index() const                             { return index;                }
+
+        */
+        ClassDef(Ali_TRD_ST_Tracklets_for_GNN,1);
+};
+//----------------------------------------------------------------------------------------
 class Ali_TRD_ST_TPC_Track_GNN : public TObject
 {
 private:

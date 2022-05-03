@@ -124,6 +124,12 @@ private:
 
     TTree* Tree_TRD_Self_Event_out;
 
+    //Tree for saving input and class member of TPC_track with adjacent TRD-tracklets (background)
+    Ali_TRD_ST_TPC_Track_GNN* TRD_TPC_Track_GNN;
+    Ali_TRD_ST_Tracklets_for_GNN* new_tracklet;
+    TTree* Tree_Input_GNN_bckgr;
+    TTree* Tree_Input_GNN_sign;
+
 
     TH2D* TH2D_AP_plot;
     const Int_t N_AP_radii = 20;
@@ -179,6 +185,7 @@ private:
     vector< vector<TEveLine*> > vec_TEveLine_self_matched_tracklets;
     TEvePointSet* TEveP_TRD_det_origin;
     TEvePointSet* TEveP_offset_points;
+    TEvePointSet* TEveP_nuclear_vertex_positions;
     TEvePointSet* TEveP_digit_positions;
     TEvePointSet* TEveP_TPC_at_offset_points;
     vector<TEveBox*> vec_eve_TRD_detector_box;
@@ -292,7 +299,19 @@ public:
     Int_t Draw_event(Long64_t i_event, Int_t graphics, Int_t draw_tracks, Int_t draw_tracklets, Double_t track_path, Int_t draw_digits);
     vector<Double_t> Get_Helix_params_from_kine(TLorentzVector TLV_particle, TVector3 TV3_vertex, Double_t charge);
     void Draw_MC_event(Long64_t i_event, Int_t graphics);
+    void Draw_MC_event_2(Long64_t i_event, Int_t graphics);
 
+    //---------------------------------------------------------------------------
+    //Some functions for analyzing nuclear interactions
+    void AddVertextoHisto(Long64_t i_event);
+    void DrawTrackletsAroundVerticesOfNuclearInt(Long64_t i_event, Int_t graphics, Int_t draw_tracklets, Int_t draw_vertex, Int_t draw_MC_tracks, Int_t apply_Helix_cut);
+    void DrawTrackletsAroundTPCTracksofCandidates(Long64_t i_event, Int_t apply_helix_cut, std::vector<Int_t> Found_TPC_Tracks, Int_t graphics, Int_t draw_tracklets, Int_t write_out_bckg, Int_t write_out_sign, Int_t Color);
+    pair<std::vector<pair<std::vector<Float_t>, Int_t>>, std::vector<pair<std::vector<Float_t>, Int_t>>> NIInteractionCandidateswithHelix(Long64_t i_event);
+    std::map<Int_t, Int_t> ReturnDictionary(Long64_t i_event, Int_t MC_index_to_track_number, Int_t MC_index_to_PDG_code);
+    vector<Int_t> CompareMCHelizestoTPCHelizes(Long64_t i_event, std::vector<pair<std::vector<Float_t>, Int_t>> helix_params_with_index);
+    void DrawHistogram();
+    void printNumber_of_Counts();
+    //----------------------------------------------------------------------
     void Animate_beams(Double_t beam_path);
     Int_t Do_TPC_TRD_matching(Long64_t i_event, Double_t xy_matching_window, Double_t z_matching_window, Int_t graphics);
     void Draw_hist_TPC_tracklet_diffs();
