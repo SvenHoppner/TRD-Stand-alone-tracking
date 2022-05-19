@@ -287,6 +287,9 @@ private:
     TH1D* h1D_invariant_mass_S;     //histogram for plotting the invariant mass of the S particle     
     TH1D* h1D_invariant_mass_L;     //histogram for plotting the invariant mass of the L particle 
     TH1D* h1D_invariant_mass_K;     //histogram for plotting the invariant mass of the K particle
+    TH1D* h1D_invariant_mass_S_reconstructed;     //histogram for plotting the invariant mass of the S particle     
+    TH1D* h1D_invariant_mass_L_reconstructed;     //histogram for plotting the invariant mass of the L particle 
+    TH1D* h1D_invariant_mass_K_reconstructed;     //histogram for plotting the invariant mass of the K particle
     std::map<Int_t, Int_t> index_particle_to_track_number; //map of particle index to track number for mc tracks
     std::map<Int_t, Int_t> map_matched_tpc_to_mc;
     std::map<Int_t, Int_t> map_matched_mc_to_tpc;

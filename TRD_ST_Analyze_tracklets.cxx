@@ -223,6 +223,10 @@ Ali_TRD_ST_Analyze::Ali_TRD_ST_Analyze(TString out_dir, TString out_file_name, I
         h1D_invariant_mass_K = new TH1D("h1D_invariant_mass_K", "h1D_invariant_mass_K", 500, 0, 9);
         h1D_invariant_mass_L = new TH1D("h1D_invariant_mass_L", "h1D_invariant_mass_L", 500, 0, 9);
         
+        h1D_invariant_mass_S_reconstructed = new TH1D("h1D_invariant_mass_S_reconstructed", "h1D_invariant_mass_S_reconstructed", 500, 0, 9);
+        h1D_invariant_mass_K_reconstructed = new TH1D("h1D_invariant_mass_K_reconstructed", "h1D_invariant_mass_K_reconstructed", 500, 0, 9);
+        h1D_invariant_mass_L_reconstructed = new TH1D("h1D_invariant_mass_L_reconstructed", "h1D_invariant_mass_L_reconstructed", 500, 0, 9);
+        
     th1d_TRD_layer_radii = new TH1D("th1d_TRD_layer_radii","th1d_TRD_layer_radii",900,250,400.0);
     vec_th1d_TRD_layer_radii_det.resize(540);
     for(Int_t TRD_detector = 0; TRD_detector < 540; TRD_detector++)
@@ -3544,7 +3548,7 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant
     vector<vector<Int_t>> vec_indices_per_generation;
 
     vector<vector<TLorentzVector>> vec_inv_masses_per_generation;
-
+    vector<vector<TLorentzVector>> vec_inv_masses_per_generation_reconstructed;
     //initialize invariant mass histogram up to a certain generation
     if(bool_make_invariant_mass_hist_up_to_layer)
     { 
@@ -3552,7 +3556,9 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant
         vec_indices_per_generation.resize(bool_make_invariant_mass_hist_up_to_layer+1);
         vec_indices_per_generation[0].push_back(-1);
         vec_inv_masses_per_generation[0].push_back(TLorentzVector());
-
+        vec_inv_masses_per_generation_reconstructed.resize(bool_make_invariant_mass_hist_up_to_layer+1);
+        vec_inv_masses_per_generation_reconstructed[0].push_back(TLorentzVector());
+        
     }
     //Ali_MC_particle*      TRD_MC_Track_pi0;
     //Ali_MC_particle*      TRD_MC_Track_gammas[2];
@@ -3560,15 +3566,17 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant
 
     //map of pdg codes corresponding to their name
     std::map<Int_t, std::string> PDG_codes =
-    {{11,"e-"},{-11,"e+"},{13,"mu-"},{-13,"mu+"},{22,"gamma"},{111,"pi0"},{113,"pi0"},{130,"K0_l"},{211,"pi+"},{-211,"pi-"},{221,"eta"},{223,"omega"},
+    {{11,"e-"},{-11,"e+"},{13,"mu-"},{-13,"mu+"},{22,"gamma"},{111,"pi0"},{113,"rho0"},{130,"K0_l"},{211,"pi+"},{-211,"pi-"},{221,"eta"},{223,"omega"},
     {310,"K0_s"},{321,"K+"},{-321,"K-"},{331,"eta'"},{-331,"anti-eta'"},{2112,"neutron"},{-2112,"anti-neutron"},{2212,"proton"},{-2212,"anti-proton"},
     {3112,"Sigma-"},{-3112,"anti-Sigma-"},{-3122,"anti-Lambda"},{3122,"Lambda"},{3222,"Sigma+"},{3212,"Sigma0"},{-3212,"anti-Sigma0"}};
 
     //map of PDG to particle masses 
-    std::map<Int_t, Double_t> PDG_masses = {{2112,0.9395},{-2112,0.9395}};
+    std::map<Int_t, Double_t> PDG_masses = {{11, 0.510998950},{-11, 0.510998950},{111 ,0.1349768},{-111, 0.1349768},{211,0.13957},{-211,0.13957},{2112,0.9395},{-2112,0.9395},{2212,0.938272},{-2212,0.938272}};
     
 
     Int_t N_pi0_found = 0;
+    Bool_t possible_reconstructed_mass = kTRUE;
+        
     for(Int_t i_track_A = 0; i_track_A < NumTracks; i_track_A++)
     {
         TRD_MC_Track_pi0 = TRD_ST_Event ->getMCparticle(i_track_A);
@@ -3586,6 +3594,7 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant
 
         //search for mother particle index in vec_indices_per_generation 
         //if it is in there and the mother is not stable
+        
         if(bool_make_invariant_mass_hist_up_to_layer)
         { 
             Int_t Mother_PDG_code=0;
@@ -3606,6 +3615,23 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant
                         vec_indices_per_generation[pos_index].push_back(MC_index_particle);
                         vec_inv_masses_per_generation[pos_index].push_back(TLV_MC_particle);
                         vec_inv_masses_per_generation[pos_index-1][pos_l_vec].SetPxPyPzE(0,0,0,0);
+
+                        if(possible_reconstructed_mass ){
+                            if(map_matched_mc_to_tpc.find(MC_index_particle) != map_matched_mc_to_tpc.end() ){
+                                TRD_ST_TPC_Track = TRD_ST_Event ->getTrack(map_matched_mc_to_tpc[MC_index_particle]);
+                                TLorentzVector TLV_MC_particle_rec = TRD_ST_TPC_Track ->get_TLV_part();
+                                TLV_MC_particle_rec.SetPtEtaPhiM(TLV_MC_particle_rec.Pt(),TLV_MC_particle_rec.Eta(),TLV_MC_particle_rec.Phi(),PDG_masses[MC_PDG_code]);
+
+                                vec_inv_masses_per_generation_reconstructed[pos_index].push_back(TLV_MC_particle_rec);
+                                
+                            }
+                            else if(TMath::Abs(MC_PDG_code) == 211 || TMath::Abs(MC_PDG_code) == 2212 || TMath::Abs(MC_PDG_code) == 321 || pos_index == bool_make_invariant_mass_hist_up_to_layer){
+                                possible_reconstructed_mass = kFALSE;
+                            }
+                            else{
+                                vec_inv_masses_per_generation_reconstructed[pos_index].push_back(TLorentzVector());
+                            }
+                        }
 
                         break;
                     }
@@ -3720,17 +3746,35 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant
                 if (it == std::end(vec_indices_per_generation[i_gen-1])) printf("ERROR FOUND!!!");
                 printf("i_gen %d, ind mother %d, own ind %d, pos %d, i_part %d\n",i_gen,MC_index_mother,TRD_MC_Track_pi0->get_index_particle(),pos_l_vec,i_particle);
                 vec_inv_masses_per_generation[i_gen-1][pos_l_vec]+=vec_inv_masses_per_generation[i_gen][i_particle];  
-                
+
+
+                if(possible_reconstructed_mass){
+                    vec_inv_masses_per_generation_reconstructed[i_gen-1][pos_l_vec]+=vec_inv_masses_per_generation_reconstructed[i_gen][i_particle];  
+                }
+
                 //pdg codes for lamda and k0 
-                if (TMath::Abs(TRD_MC_Track_pi0->get_PDGcode())==3122) 
+                if (TMath::Abs(TRD_MC_Track_pi0->get_PDGcode())==3122){ 
                     h1D_invariant_mass_L -> Fill(vec_inv_masses_per_generation[i_gen][i_particle].M(), 1);
-                if (TMath::Abs(TRD_MC_Track_pi0->get_PDGcode())==310) 
+                    if(possible_reconstructed_mass)
+                        h1D_invariant_mass_L_reconstructed -> Fill(vec_inv_masses_per_generation_reconstructed[i_gen][i_particle].M(), 1);
+                    
+                }
+                if (TMath::Abs(TRD_MC_Track_pi0->get_PDGcode())==310){ 
                     h1D_invariant_mass_K -> Fill(vec_inv_masses_per_generation[i_gen][i_particle].M(), 1);
-                
+                    if(possible_reconstructed_mass)
+                        h1D_invariant_mass_K_reconstructed -> Fill(vec_inv_masses_per_generation_reconstructed[i_gen][i_particle].M(), 1);
+                    
+                }
             }
         }
         vec_inv_masses_per_generation[0][0]-= TLorentzVector(0,0,0,PDG_masses[2112]);
         h1D_invariant_mass_S -> Fill(vec_inv_masses_per_generation[0][0].M(), 1);
+        if(possible_reconstructed_mass){
+            vec_inv_masses_per_generation_reconstructed[0][0]-= TLorentzVector(0,0,0,PDG_masses[2112]);
+            h1D_invariant_mass_S_reconstructed -> Fill(vec_inv_masses_per_generation_reconstructed[0][0].M(), 1);
+            printf("\npossible reconstruct\n");
+        
+        }
     }
 }
 //----------------------------------------------------------------------------------------
@@ -3752,6 +3796,19 @@ void Ali_TRD_ST_Analyze::Draw_Inv_Mass_histogram(){
     TCanvas* can_invariant_mass_K = new TCanvas("can_invariant_mass_K", "can_invariant_mass_K", 10, 10, 500, 500);
     can_invariant_mass_K -> cd();
     h1D_invariant_mass_K -> Draw("HIST");
+
+
+    TCanvas* can_invariant_mass_S_reconstructed = new TCanvas("can_invariant_mass_S_reconstructed", "can_invariant_mass_S_reconstructed", 10, 10, 500, 500);
+    can_invariant_mass_S_reconstructed -> cd();
+    h1D_invariant_mass_S_reconstructed -> Draw("HIST");
+
+    TCanvas* can_invariant_mass_L_reconstructed = new TCanvas("can_invariant_mass_L_reconstructed", "can_invariant_mass_L_reconstructed", 10, 10, 500, 500);
+    can_invariant_mass_L_reconstructed -> cd();
+    h1D_invariant_mass_L_reconstructed -> Draw("HIST");
+
+    TCanvas* can_invariant_mass_K_reconstructed = new TCanvas("can_invariant_mass_K_reconstructed", "can_invariant_mass_K_reconstructed", 10, 10, 500, 500);
+    can_invariant_mass_K_reconstructed -> cd();
+    h1D_invariant_mass_K_reconstructed -> Draw("HIST");
 
 }
 //----------------------------------------------------------------------------------------
@@ -3820,7 +3877,7 @@ void Ali_TRD_ST_Analyze::Match_TPC_to_MC_Data()
         Helixparams_cuts[4] = 5000;
         Helixparams_cuts[5] = 1./100;
         
-        Float_t Chi_2_best = 1;
+        Float_t Chi_2_best = 12;
 
         for(Int_t i=0; i<6; i++){
             Helixparams_tpc[i] = TRD_ST_TPC_Track ->getHelix_param(i) ;
@@ -3851,14 +3908,14 @@ void Ali_TRD_ST_Analyze::Match_TPC_to_MC_Data()
             Float_t Chi_2 = 0;
             for (int i = 0;i<6 ;i++){ Chi_2 += 0.2* TMath::Power(Helixparams_diff[i],2)*Helixparams_cuts[i];}
             
-            printf("tpc: %d, mc: %d, Chi_2: %f\n",i_track_tpc,i_track_mc,Chi_2);
-            if(i_track_tpc==2 && i_track_mc==3)
+           /* if(i_track_tpc==2 && i_track_mc==3 && 0)
             {
                for (int i = 0;i<6 ;i++){ printf("helix_diff: %f, %f, %f\n",Helixparams_diff[i],TMath::Power(Helixparams_diff[i],2),Helixparams_cuts[i]);}
                
-            }
+            }*/
             if(Chi_2<Chi_2_best)
             {
+                printf("tpc: %d, mc: %d, Chi_2: %f\n",i_track_tpc,i_track_mc,Chi_2);
                 Chi_2_best = Chi_2;
                 best_match = MC_index_particle;
             }
@@ -3895,7 +3952,7 @@ void Ali_TRD_ST_Analyze::Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t
     TVector3       TV3_MC_particle_vertex_end;
 
     std::map<Int_t, std::string> PDG_codes_names =
-    {{11,"e-"},{-11,"e+"},{13,"mu-"},{-13,"mu+"},{22,"gamma"},{111,"pi0"},{113,"pi0"},{130,"K0_l"},{211,"pi+"},{-211,"pi-"},{221,"eta"},{223,"omega"},
+    {{11,"e-"},{-11,"e+"},{13,"mu-"},{-13,"mu+"},{22,"gamma"},{111,"pi0"},{113,"rho0"},{130,"K0_l"},{211,"pi+"},{-211,"pi-"},{221,"eta"},{223,"omega"},
     {310,"K0_s"},{321,"K+"},{-321,"K-"},{331,"eta'"},{-331,"anti-eta'"},{2112,"neutron"},{-2112,"anti-neutron"},{2212,"proton"},{-2212,"anti-proton"},
     {3112,"Sigma-"},{-3112,"anti-Sigma-"},{-3122,"anti-Lambda"},{3122,"Lambda"},{3222,"Sigma+"},{3212,"Sigma0"},{-3212,"anti-Sigma0"}};
 
