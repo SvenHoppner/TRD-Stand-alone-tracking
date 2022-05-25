@@ -7,3 +7,4 @@ testing_stuff.cc
 Ali_make_tracklets_from*
 AnalysisResults.root
 *_tmp_*
+Histograms/*

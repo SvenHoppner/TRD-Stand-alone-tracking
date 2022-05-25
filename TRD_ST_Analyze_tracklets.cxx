@@ -219,13 +219,15 @@ Ali_TRD_ST_Analyze::Ali_TRD_ST_Analyze(TString out_dir, TString out_file_name, I
     }
 #endif
     if(1)
-        h1D_invariant_mass_S = new TH1D("h1D_invariant_mass_S", "h1D_invariant_mass_S", 500, 0, 9);
-        h1D_invariant_mass_K = new TH1D("h1D_invariant_mass_K", "h1D_invariant_mass_K", 500, 0, 9);
-        h1D_invariant_mass_L = new TH1D("h1D_invariant_mass_L", "h1D_invariant_mass_L", 500, 0, 9);
-        
-        h1D_invariant_mass_S_reconstructed = new TH1D("h1D_invariant_mass_S_reconstructed", "h1D_invariant_mass_S_reconstructed", 500, 0, 9);
-        h1D_invariant_mass_K_reconstructed = new TH1D("h1D_invariant_mass_K_reconstructed", "h1D_invariant_mass_K_reconstructed", 500, 0, 9);
-        h1D_invariant_mass_L_reconstructed = new TH1D("h1D_invariant_mass_L_reconstructed", "h1D_invariant_mass_L_reconstructed", 500, 0, 9);
+        h1D_invariant_mass_S = new TH1D("h1D_invariant_mass_S", "h1D_invariant_mass_S", 500, 0, 5);
+        h1D_invariant_mass_K = new TH1D("h1D_invariant_mass_K", "h1D_invariant_mass_K", 500, 0, 5);
+        h1D_invariant_mass_L = new TH1D("h1D_invariant_mass_L", "h1D_invariant_mass_L", 500, 0, 5);
+        h2d_invariant_mass_vs_R_Lambda = new TH2D("h2d_invariant_mass_vs_R_Lambda", "h2d_invariant_mass_vs_R_Lambda", 500, 0, 5, 500, 0, 200);
+        h1d_R_Lambda_vertex = new TH1D("h1d_R_Lambda_vertex", "h1d_R_Lambda_vertex", 500, 0, 200);
+
+        h1D_invariant_mass_S_reconstructed = new TH1D("h1D_invariant_mass_S_reconstructed", "h1D_invariant_mass_S_reconstructed", 500, 0, 5);
+        h1D_invariant_mass_K_reconstructed = new TH1D("h1D_invariant_mass_K_reconstructed", "h1D_invariant_mass_K_reconstructed", 500, 0, 5);
+        h1D_invariant_mass_L_reconstructed = new TH1D("h1D_invariant_mass_L_reconstructed", "h1D_invariant_mass_L_reconstructed", 500, 0, 5);
         
     th1d_TRD_layer_radii = new TH1D("th1d_TRD_layer_radii","th1d_TRD_layer_radii",900,250,400.0);
     vec_th1d_TRD_layer_radii_det.resize(540);
@@ -3755,6 +3757,9 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant
                 //pdg codes for lamda and k0 
                 if (TMath::Abs(TRD_MC_Track_pi0->get_PDGcode())==3122){ 
                     h1D_invariant_mass_L -> Fill(vec_inv_masses_per_generation[i_gen][i_particle].M(), 1);
+                    TVector3       TV3_MC_particle_vertex = TRD_MC_Track_pi0 ->get_TV3_particle_vertex();
+                    h1d_R_Lambda_vertex -> Fill(TV3_MC_particle_vertex.Mag(), 1);
+                    h2d_invariant_mass_vs_R_Lambda -> Fill(vec_inv_masses_per_generation[i_gen][i_particle].M(),TV3_MC_particle_vertex.Mag());
                     if(possible_reconstructed_mass)
                         h1D_invariant_mass_L_reconstructed -> Fill(vec_inv_masses_per_generation_reconstructed[i_gen][i_particle].M(), 1);
                     
@@ -3785,6 +3790,15 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant
 
 void Ali_TRD_ST_Analyze::Draw_Inv_Mass_histogram(){
     //draw the histograms for the invariant mass
+
+
+    //printf("Write data to output file \n");
+    //TFile* h_detector_hit_outputfile = new TFile("./h_detector_hit.root","RECREATE");
+    // h_detector_hit_outputfile ->cd();
+    //  h_detector_hit->Write();
+
+    // THIS NEEDED
+
     TCanvas* can_invariant_mass_S = new TCanvas("can_invariant_mass_S", "can_invariant_mass_S", 10, 10, 500, 500);
     can_invariant_mass_S -> cd();
     h1D_invariant_mass_S -> Draw("HIST");
@@ -3792,6 +3806,7 @@ void Ali_TRD_ST_Analyze::Draw_Inv_Mass_histogram(){
     TCanvas* can_invariant_mass_L = new TCanvas("can_invariant_mass_L", "can_invariant_mass_L", 10, 10, 500, 500);
     can_invariant_mass_L -> cd();
     h1D_invariant_mass_L -> Draw("HIST");
+
 
     TCanvas* can_invariant_mass_K = new TCanvas("can_invariant_mass_K", "can_invariant_mass_K", 10, 10, 500, 500);
     can_invariant_mass_K -> cd();
@@ -3802,13 +3817,23 @@ void Ali_TRD_ST_Analyze::Draw_Inv_Mass_histogram(){
     can_invariant_mass_S_reconstructed -> cd();
     h1D_invariant_mass_S_reconstructed -> Draw("HIST");
 
+
     TCanvas* can_invariant_mass_L_reconstructed = new TCanvas("can_invariant_mass_L_reconstructed", "can_invariant_mass_L_reconstructed", 10, 10, 500, 500);
     can_invariant_mass_L_reconstructed -> cd();
     h1D_invariant_mass_L_reconstructed -> Draw("HIST");
 
+
     TCanvas* can_invariant_mass_K_reconstructed = new TCanvas("can_invariant_mass_K_reconstructed", "can_invariant_mass_K_reconstructed", 10, 10, 500, 500);
     can_invariant_mass_K_reconstructed -> cd();
     h1D_invariant_mass_K_reconstructed -> Draw("HIST");
+
+    TCanvas* can_h1d_R_Lambda_vertex = new TCanvas("can_h1d_R_Lambda_vertex", "can_h1d_R_Lambda_vertex", 10, 10, 500, 500);
+    can_h1d_R_Lambda_vertex -> cd();
+    h1d_R_Lambda_vertex -> Draw("HIST");
+
+    TCanvas* can_h2d_invariant_mass_vs_R_Lambda = new TCanvas("can_h2d_invariant_mass_vs_R_Lambda", "can_h2d_invariant_mass_vs_R_Lambda", 10, 10, 500, 500);
+    can_h2d_invariant_mass_vs_R_Lambda -> cd();
+    h2d_invariant_mass_vs_R_Lambda -> Draw();
 
 }
 //----------------------------------------------------------------------------------------
@@ -3871,7 +3896,7 @@ void Ali_TRD_ST_Analyze::Match_TPC_to_MC_Data()
 
         //1/ sigma^2 
         Helixparams_cuts[0] = 1./100;
-        Helixparams_cuts[1] = 1./300;
+        Helixparams_cuts[1] = 1./5000;
         Helixparams_cuts[2] = 1./500;
         Helixparams_cuts[3] = 500;
         Helixparams_cuts[4] = 5000;
@@ -3907,12 +3932,14 @@ void Ali_TRD_ST_Analyze::Match_TPC_to_MC_Data()
             }
             Float_t Chi_2 = 0;
             for (int i = 0;i<6 ;i++){ Chi_2 += 0.2* TMath::Power(Helixparams_diff[i],2)*Helixparams_cuts[i];}
-            
-           /* if(i_track_tpc==2 && i_track_mc==3 && 0)
+            /*
+            if(i_track_tpc==8 && i_track_mc==45 && 1)
             {
                for (int i = 0;i<6 ;i++){ printf("helix_diff: %f, %f, %f\n",Helixparams_diff[i],TMath::Power(Helixparams_diff[i],2),Helixparams_cuts[i]);}
                
             }*/
+            //printf("tpc: %d, mc: %d, Chi_2: %f\n",i_track_tpc,i_track_mc,Chi_2);
+                
             if(Chi_2<Chi_2_best)
             {
                 printf("tpc: %d, mc: %d, Chi_2: %f\n",i_track_tpc,i_track_mc,Chi_2);

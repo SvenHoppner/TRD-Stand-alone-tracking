@@ -107,7 +107,7 @@ void Macro_TRD_tracking(TString input_list = "run0_test.txt", Int_t event_plot =
 
     Int_t graphics                  = 0; // 0 = no 3D graphics, 1 = 3D graphics (#define USEEVE in TRD_ST_Analyze_tracklets needs to be defined too)
     Int_t draw_tracklets_TPC_match  = 0; // Draw tracklets matched with TPC tracks
-    Int_t draw_all_TPC_tracks       = 1; // Draw all TPC tracks
+    Int_t draw_all_TPC_tracks       = 0; // Draw all TPC tracks
     Int_t draw_all_TRD_tracks       = 0; // Draw all TRD tracks ->
     Int_t draw_all_tracklets        = 0; // Draw all TRD tracklets
     Int_t draw_found_tracklets      = 1; // Draws tracklets found by tracker
