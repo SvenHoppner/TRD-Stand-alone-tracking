@@ -229,6 +229,10 @@ Ali_TRD_ST_Analyze::Ali_TRD_ST_Analyze(TString out_dir, TString out_file_name, I
         h1D_invariant_mass_K_reconstructed = new TH1D("h1D_invariant_mass_K_reconstructed", "h1D_invariant_mass_K_reconstructed", 500, 0, 5);
         h1D_invariant_mass_L_reconstructed = new TH1D("h1D_invariant_mass_L_reconstructed", "h1D_invariant_mass_L_reconstructed", 500, 0, 5);
         
+        h2d_reconstruction_eff_vs_momentum = new TH1D("h2d_reconstruction_eff_vs_momentum", "h2d_reconstruction_eff_vs_momentum", 16, 0, 8);
+        h2d_total_rec_vs_momentum          = new TH1D("h2d_total_rec_vs_momentum", "h2d_total_rec_vs_momentum", 16, 0, 8);
+    
+
     th1d_TRD_layer_radii = new TH1D("th1d_TRD_layer_radii","th1d_TRD_layer_radii",900,250,400.0);
     vec_th1d_TRD_layer_radii_det.resize(540);
     for(Int_t TRD_detector = 0; TRD_detector < 540; TRD_detector++)
@@ -3532,6 +3536,155 @@ void Ali_TRD_ST_Analyze::Draw_MC_track(Int_t i_track, Int_t color, Double_t line
     //printf("%s Ali_TRD_ST_Analyze::Draw_TPC_track, i_track: %d %s \n",KRED,i_track,KNRM,1000.0);
 }
 //----------------------------------------------------------------------------------------
+void Ali_TRD_ST_Analyze::Count_reconstruction_efficiency()
+{
+    Int_t number_of_poss = number_events_tot-number_possible_reconstruct_event;
+    Float_t percent_possible_tot = (float) number_possible_reconstruct/number_events_tot;
+    Float_t percent_possible = (float) number_possible_reconstruct/(number_events_tot-number_possible_reconstruct_event);
+    printf("number events: %d, number possible: %d, number reconstructed: %d, percent_tot %f, percent_good %f\n",number_events_tot,number_of_poss,number_possible_reconstruct,percent_possible_tot,percent_possible);
+    
+    for(Int_t i = 0; i<= h2d_reconstruction_eff_vs_momentum->GetNbinsX();i++)
+        if(h2d_total_rec_vs_momentum -> GetBinContent(i) != 0)
+            h2d_reconstruction_eff_vs_momentum -> SetBinContent(i,h2d_reconstruction_eff_vs_momentum ->GetBinContent(i) / h2d_total_rec_vs_momentum -> GetBinContent(i));
+
+    TCanvas* can_reconstruction_eff_vs_momentum = new TCanvas("can_reconstruction_eff_vs_momentum", "can_reconstruction_eff_vs_momentum", 10, 10, 500, 500);
+    can_reconstruction_eff_vs_momentum -> cd();
+    h2d_reconstruction_eff_vs_momentum -> GetYaxis()->SetRangeUser(0., 0.45);
+    h2d_reconstruction_eff_vs_momentum -> SetXTitle("momentum / GeV");
+    h2d_reconstruction_eff_vs_momentum -> SetYTitle("efficiency");
+    h2d_reconstruction_eff_vs_momentum -> Draw("HIST");
+
+    /*std::ofstream ofs ("ST_out/reconst_eff.txt", std::ofstream::out);
+
+    ofs <<"percent_tot: " << percent_possible_tot ;
+
+    ofs.close();*/
+}
+
+
+
+
+
+//----------------------------------------------------------------------------------------
+void Ali_TRD_ST_Analyze::Check_possible_reconstruction(Int_t calc_reconstuction_efficiency_up_to_layer, Int_t event)
+{
+    Match_TPC_to_MC_Data_MC();
+
+    UShort_t NumTracks            = TRD_ST_Event ->getMCparticles(); // number of tracks in this event
+    
+
+    vector<vector<Int_t>> vec_indices_per_generation;
+    vector<vector<TLorentzVector>> vec_inv_masses_per_generation;
+    vector<vector<TLorentzVector>> vec_inv_masses_per_generation_reconstructed;
+    
+    if(calc_reconstuction_efficiency_up_to_layer)
+    { 
+        //vec_inv_masses_per_generation.resize(calc_reconstuction_efficiency_up_to_layer+1);
+        vec_indices_per_generation.resize(calc_reconstuction_efficiency_up_to_layer+1);
+        vec_indices_per_generation[0].push_back(-1);
+        //vec_inv_masses_per_generation[0].push_back(TLorentzVector());
+        //vec_inv_masses_per_generation_reconstructed.resize(calc_reconstuction_efficiency_up_to_layer+1);
+        //vec_inv_masses_per_generation_reconstructed[0].push_back(TLorentzVector());
+        
+    }
+    else
+    {
+        return;
+    }
+
+    //map of pdg codes corresponding to their name
+    std::map<Int_t, std::string> PDG_codes =
+    {{11,"e-"},{-11,"e+"},{13,"mu-"},{-13,"mu+"},{22,"gamma"},{111,"pi0"},{113,"rho0"},{130,"K0_l"},{211,"pi+"},{-211,"pi-"},{221,"eta"},{223,"omega"},
+    {310,"K0_s"},{321,"K+"},{-321,"K-"},{331,"eta'"},{-331,"anti-eta'"},{2112,"neutron"},{-2112,"anti-neutron"},{2212,"proton"},{-2212,"anti-proton"},
+    {3112,"Sigma-"},{-3112,"anti-Sigma-"},{-3122,"anti-Lambda"},{3122,"Lambda"},{3222,"Sigma+"},{3212,"Sigma0"},{-3212,"anti-Sigma0"}};
+
+    //map of PDG to particle masses 
+    std::map<Int_t, Double_t> PDG_masses = {{11, 0.510998950},{-11, 0.510998950},{111 ,0.1349768},{-111, 0.1349768},{211,0.13957},{-211,0.13957},{2112,0.9395},{-2112,0.9395},{2212,0.938272},{-2212,0.938272}};
+    
+    std::map<Int_t, Double_t> PDG_codes_charge =
+    {{11,-1.0},{-11,1.0},{13,-1.0},{-13,1.0},{22,0},{111,0},{113,0},{130,0},{211,1.0},{-211,-1.0},{221,0},{223,-1.0},
+    {310,0},{321,1.0},{-321,-1.0},{331,0},{-331,0},{2112,0},{-2112,0},{2212,1.0},{-2212,-1.0},
+    {3112,-1.0},{-3112,1.0},{-3122,0},{3122,0},{3222,1.0},{3212,0},{-3212,0}};
+
+    Bool_t possible_reconstructed_mass = kTRUE;
+    Bool_t possible_event = kTRUE;
+    TLorentzVector S_momentum = TLorentzVector();
+        
+    for(Int_t i_track_A = 0; i_track_A < NumTracks; i_track_A++)
+    {
+        TRD_MC_Track_pi0 = TRD_ST_Event ->getMCparticle(i_track_A);
+
+        TVector3       TV3_MC_particle_vertex = TRD_MC_Track_pi0 ->get_TV3_particle_vertex();
+        TLorentzVector TLV_MC_particle        = TRD_MC_Track_pi0 ->get_TLV_particle();
+        Int_t          MC_PDG_code            = TRD_MC_Track_pi0 ->get_PDGcode();
+        Int_t          MC_index_mother        = TRD_MC_Track_pi0 ->get_index_mother();
+        Int_t          MC_index_particle      = TRD_MC_Track_pi0 ->get_index_particle();
+        Int_t          MC_N_daughters         = TRD_MC_Track_pi0 ->get_N_daughters();
+        index_particle_to_track_number.insert(std::pair<int, int> (MC_index_particle, i_track_A));
+        
+
+        Int_t Mother_PDG_code=0;
+        if (MC_index_mother>=0)
+            Mother_PDG_code = TRD_ST_Event ->getMCparticle(index_particle_to_track_number[MC_index_mother])->get_PDGcode();
+
+        if (MC_index_mother==-1)
+            S_momentum += TLV_MC_particle;
+
+        if(!(TMath::Abs(Mother_PDG_code) == 211 || TMath::Abs(Mother_PDG_code) == 2212 || TMath::Abs(Mother_PDG_code) == 321))
+        {
+            for (auto const &indVector : vec_indices_per_generation) {
+                auto it = std::find(std::begin(indVector), std::end(indVector), MC_index_mother);
+                if (it != std::end(indVector)) {
+                    Int_t pos_l_vec = it - std::begin(indVector);
+                    Int_t pos_index = &indVector - &vec_indices_per_generation[0] + 1;
+                    if(pos_index > calc_reconstuction_efficiency_up_to_layer)
+                        break;
+                    if(pos_index == calc_reconstuction_efficiency_up_to_layer && PDG_codes_charge[MC_PDG_code] == 0){
+                        possible_event=kFALSE;
+                    }
+                    //printf("pos_index %d, pos_l_vec %d, index %d \n",pos_index,pos_l_vec, MC_index_particle);    
+                    vec_indices_per_generation[pos_index].push_back(MC_index_particle);
+                    //vec_inv_masses_per_generation[pos_index].push_back(TLV_MC_particle);
+                    //vec_inv_masses_per_generation[pos_index-1][pos_l_vec].SetPxPyPzE(0,0,0,0);
+
+                    if(possible_reconstructed_mass ){
+                        if(!(map_matched_mc_to_tpc.find(MC_index_particle) != map_matched_mc_to_tpc.end()) && (TMath::Abs(MC_PDG_code) == 211 || TMath::Abs(MC_PDG_code) == 2212 || TMath::Abs(MC_PDG_code) == 321 || pos_index == calc_reconstuction_efficiency_up_to_layer)){
+                            possible_reconstructed_mass = kFALSE;
+                            break;
+                        }  
+                    }
+
+                    break;
+                }
+            }
+        }  
+        if(!possible_reconstructed_mass) break;  
+    
+
+    }
+
+    S_momentum -= TLorentzVector(0,0,0,PDG_masses[2112]);
+    if(possible_reconstructed_mass){
+        number_possible_reconstruct++;
+        h2d_reconstruction_eff_vs_momentum -> Fill(S_momentum.P(),1);
+    
+    }
+    else if(possible_event){
+        if(S_momentum.P()>5)
+            printf("Event with more than 5GeV not reconstructed: %d\n",event); 
+    }
+    if(possible_event){
+        number_possible_reconstruct_event++;
+    }
+    number_events_tot++;
+    h2d_total_rec_vs_momentum -> Fill(S_momentum.P(),1);
+    
+}
+
+//----------------------------------------------------------------------------------------
+
+
+
 
 
 //----------------------------------------------------------------------------------------
@@ -3541,7 +3694,7 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant
     //printf("Ali_TRD_ST_Analyze::Scan_MC_Event \n");
 
 
-    Match_TPC_to_MC_Data();
+    Match_TPC_to_MC_Data_MC();
 
     UShort_t NumTracks            = TRD_ST_Event ->getMCparticles(); // number of tracks in this event
     Int_t arr_index_daughters_pi0[5]   = {-1};
@@ -3590,9 +3743,9 @@ void Ali_TRD_ST_Analyze::Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant
         Int_t          MC_index_particle      = TRD_MC_Track_pi0 ->get_index_particle();
         Int_t          MC_N_daughters         = TRD_MC_Track_pi0 ->get_N_daughters();
         index_particle_to_track_number.insert(std::pair<int, int> (MC_index_particle, i_track_A));
-        if(i_track_A == 0) printf("new MC_event\n----------------------------------------\n");
+       // if(i_track_A == 0) printf("new MC_event\n----------------------------------------\n");
 
-        printf("MC_track %d with PDG number %d, index %d, partice: %s, mother id %d, vertex: (%4.2f,%4.2f,%4.2f), p: %4.3f\n", i_track_A, MC_PDG_code,MC_index_particle, PDG_codes[MC_PDG_code].c_str(),MC_index_mother,TV3_MC_particle_vertex.X(),TV3_MC_particle_vertex.Y(),TV3_MC_particle_vertex.Z(),TLV_MC_particle.P());
+        //printf("MC_track %d with PDG number %d, index %d, partice: %s, mother id %d, vertex: (%4.2f,%4.2f,%4.2f), p: %4.3f\n", i_track_A, MC_PDG_code,MC_index_particle, PDG_codes[MC_PDG_code].c_str(),MC_index_mother,TV3_MC_particle_vertex.X(),TV3_MC_particle_vertex.Y(),TV3_MC_particle_vertex.Z(),TLV_MC_particle.P());
 
         //search for mother particle index in vec_indices_per_generation 
         //if it is in there and the mother is not stable
@@ -3866,7 +4019,39 @@ void Ali_TRD_ST_Analyze::Draw_Inv_Mass_histogram(){
 
 //----------------------------------------------------------------------------------------
 
+//Faulty Part : Function matching MC_index is wrong
+//
+void Ali_TRD_ST_Analyze::Match_TPC_to_MC_Data_MC()
+{   
+    map_matched_tpc_to_mc.clear();
+    map_matched_mc_to_tpc.clear();
+    
+    UShort_t NumTPCTracks           = TRD_ST_Event ->getNumTracks(); // number of tracks in this event
+    Int_t    NumTRDTracklets        = TRD_ST_Event ->getNumTracklets();
+    UShort_t NumMCTracks            = TRD_ST_Event ->getMCparticles(); // number of tracks in this event
+    
+    
+    Int_t best_match = -1;
+    for(Int_t i_track_tpc = 0; i_track_tpc < NumTPCTracks; i_track_tpc++)
+    {
+        TRD_ST_TPC_Track = TRD_ST_Event ->getTrack(i_track_tpc);
+        Int_t MC_index =  (Int_t) TRD_ST_TPC_Track ->getMC_label();
+        printf("number tpc: %d, number mc: %d, i_tpc: %d, mc_index: %d\n",NumTPCTracks, NumMCTracks,i_track_tpc,MC_index);
+        //TRD_MC_Track            = TRD_ST_Event      ->getMCparticle(MC_index);
+        //best_match = TRD_MC_Track      ->get_index_particle();
 
+        best_match = MC_index;
+        if(best_match!= -1){
+            map_matched_tpc_to_mc.insert(std::pair<int, int> (i_track_tpc, best_match));
+            map_matched_mc_to_tpc.insert(std::pair<int, int> (best_match, i_track_tpc));
+            
+        }
+
+
+    }   
+        
+    
+}
 
 
 //----------------------------------------------------------------------------------------
@@ -3898,8 +4083,8 @@ void Ali_TRD_ST_Analyze::Match_TPC_to_MC_Data()
         Helixparams_cuts[0] = 1./100;
         Helixparams_cuts[1] = 1./5000;
         Helixparams_cuts[2] = 1./500;
-        Helixparams_cuts[3] = 500;
-        Helixparams_cuts[4] = 5000;
+        Helixparams_cuts[3] = 5000;
+        Helixparams_cuts[4] = 50000;
         Helixparams_cuts[5] = 1./100;
         
         Float_t Chi_2_best = 12;
@@ -3908,6 +4093,8 @@ void Ali_TRD_ST_Analyze::Match_TPC_to_MC_Data()
             Helixparams_tpc[i] = TRD_ST_TPC_Track ->getHelix_param(i) ;
             
         }
+        //Float_t   getHelix_param(Int_t i_param) const              {return aliHelix_params[i_param]; }
+        
 
         Int_t best_match = -1;
         
@@ -3930,19 +4117,23 @@ void Ali_TRD_ST_Analyze::Match_TPC_to_MC_Data()
             for(Int_t i=0; i<6; i++){
                 Helixparams_diff[i]=  TMath::Abs((Float_t)fhelix[i]-Helixparams_tpc[i]); 
             }
+
             Float_t Chi_2 = 0;
             for (int i = 0;i<6 ;i++){ Chi_2 += 0.2* TMath::Power(Helixparams_diff[i],2)*Helixparams_cuts[i];}
-            /*
-            if(i_track_tpc==8 && i_track_mc==45 && 1)
+            
+            /*if(i_track_tpc==3 && i_track_mc==2 && 1)
             {
-               for (int i = 0;i<6 ;i++){ printf("helix_diff: %f, %f, %f\n",Helixparams_diff[i],TMath::Power(Helixparams_diff[i],2),Helixparams_cuts[i]);}
+               for (int i = 0;i<6 ;i++){ 
+                printf("helix_diff: %f, %f, %f\n",Helixparams_diff[i],TMath::Power(Helixparams_diff[i],2),Helixparams_cuts[i]);
+                printf("helix_vals: %f, %f\n",fhelix[i],Helixparams_tpc[i]);
+                }
                
             }*/
-            //printf("tpc: %d, mc: %d, Chi_2: %f\n",i_track_tpc,i_track_mc,Chi_2);
+            printf("tpc: %d, mc: %d, Chi_2: %f\n",i_track_tpc,i_track_mc,Chi_2);
                 
             if(Chi_2<Chi_2_best)
             {
-                printf("tpc: %d, mc: %d, Chi_2: %f\n",i_track_tpc,i_track_mc,Chi_2);
+                //printf("tpc: %d, mc: %d, Chi_2: %f\n",i_track_tpc,i_track_mc,Chi_2);
                 Chi_2_best = Chi_2;
                 best_match = MC_index_particle;
             }

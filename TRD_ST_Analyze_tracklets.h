@@ -291,10 +291,19 @@ private:
     TH1D* h1D_invariant_mass_L_reconstructed;     //histogram for plotting the invariant mass of the L particle 
     TH1D* h1D_invariant_mass_K_reconstructed;     //histogram for plotting the invariant mass of the K particle
     TH2D* h2d_invariant_mass_vs_R_Lambda;
+
+    TH1D* h2d_reconstruction_eff_vs_momentum;
+    TH1D* h2d_total_rec_vs_momentum;
+    
     TH1D* h1d_R_Lambda_vertex;
     std::map<Int_t, Int_t> index_particle_to_track_number; //map of particle index to track number for mc tracks
     std::map<Int_t, Int_t> map_matched_tpc_to_mc;
     std::map<Int_t, Int_t> map_matched_mc_to_tpc;
+
+    Int_t number_possible_reconstruct = 0;
+    Int_t number_events_tot = 0;
+    Int_t number_possible_reconstruct_event = 0;
+    
     
     //TFile* out_gain;
 
@@ -328,6 +337,7 @@ public:
     void Draw_hist_TPC_tracklet_diffs();
     TH1I* get_h_good_bad_TRD_chambers();
 
+    
     void set_self_event_info();
 
     Ali_TRD_ST_Tracklets** Tracklets;
@@ -361,7 +371,9 @@ public:
     void Draw_MC_track_w_vertices(Int_t i_track_print_nbr, Int_t color, Double_t line_width, Double_t max_path, Int_t i_track);
     Bool_t MCComesFromSexaquark(Ali_MC_particle * mcPart);
     void Match_TPC_to_MC_Data();
-
+    void Match_TPC_to_MC_Data_MC();
+    void Check_possible_reconstruction(Int_t calc_reconstuction_efficiency_up_to_layer, Int_t event);
+    void Count_reconstruction_efficiency();
 
     TH1D* get_layer_radii_hist() {return h_layer_radii_det;}
     Long64_t get_N_Events() {return N_Events;}
