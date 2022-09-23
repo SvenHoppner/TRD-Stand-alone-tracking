@@ -10,6 +10,7 @@
 #pragma link C++ class Ali_Helix+;
 #pragma link C++ class Ali_TRD_ST_TPC_Track_GNN+;
 #pragma link C++ class Ali_TRD_ST_Tracklets_for_GNN+;
+#pragma link C++ class Ali_TRD_ST_Vertex_Info_Sexa_NN+;
 
 
 #endif

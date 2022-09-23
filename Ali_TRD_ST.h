@@ -323,6 +323,8 @@ public:
 
 
 //----------------------------------------------------------------------------------------
+
+
 class Ali_TRD_ST_Digits : public TObject
 {
 private:
@@ -459,7 +461,7 @@ private:
     Float_t        TPCdEdx; // Energy loss information of TPC
     Float_t        TOFsignal; // Time-of-flight
     Float_t        Track_length; // length of track
-    Float_t        MC_label; // index/label of corresponding MC particle, borquez edit
+    Float_t        MC_label; 
 
     Float_t        aliHelix_params[6];
     Float_t        aliHelix_TRD_params[6];
@@ -495,13 +497,11 @@ public:
 	void setNITScls(UShort_t s)               { NITScls = s;}
 	void setStatus(UShort_t s)                { status = s;}
 	void setTPCchi2(Float_t f)                { TPCchi2 = f;}
-    void setimpact_angle_on_TRD(Float_t f)          {impact_angle_on_TRD = f;}
-	void setTPCdEdx(Float_t f)                      {TPCdEdx = f;}
-	void setTOFsignal(Float_t f)                    {TOFsignal = f;}
-    void setTrack_length(Float_t f)                 {Track_length = f;}
-    void setMC_label(Float_t f)                     { MC_label = f; } // borquez edit
-
-        
+    void setimpact_angle_on_TRD(Float_t f)           {impact_angle_on_TRD = f;}
+	void setTPCdEdx(Float_t f)                       {TPCdEdx = f;}
+	void setTOFsignal(Float_t f)                     {TOFsignal = f;}
+    void setTrack_length(Float_t f)                  {Track_length = f;}
+    void setMC_label(Float_t f)                  {MC_label = f;}
     void setHelix(Float_t a, Float_t b,Float_t c,Float_t d,Float_t e,Float_t f)
     {
         aliHelix_params[0] = a;
@@ -542,13 +542,13 @@ public:
 	UShort_t getNITScls() const               { return NITScls;    }
 	UShort_t getStatus() const               { return status;    }
 	Float_t  getTPCchi2() const              { return TPCchi2; }
-        Float_t   getimpact_angle_on_TRD() const    { return impact_angle_on_TRD; }
+    Float_t   getimpact_angle_on_TRD() const    { return impact_angle_on_TRD; }
 	Float_t   getTPCdEdx() const                { return TPCdEdx; }
 	Float_t   getTOFsignal() const              { return TOFsignal; }
-        Float_t   getTrack_length() const           { return Track_length; }
-        Float_t   getHelix_param(Int_t i_param) const              {return aliHelix_params[i_param]; }
-        Float_t   getHelix_TRD_param(Int_t i_param) const              {return aliHelix_TRD_params[i_param]; }
-        Int_t getMC_label()                     { return (Int_t)MC_label; } // borquez edit
+    Float_t   getTrack_length() const           { return Track_length; }
+    Float_t   getMC_label() const           { return MC_label; }
+    Float_t   getHelix_param(Int_t i_param) const              {return aliHelix_params[i_param]; }
+    Float_t   getHelix_TRD_param(Int_t i_param) const              {return aliHelix_TRD_params[i_param]; }
 
         
 
@@ -929,6 +929,255 @@ void Ali_Helix::Evaluate(Double_t t,Double_t r[3])  //radius vector
 }
 //________________________________________________________________________
 
+
+
+class Ali_AS_V0 : public TObject
+{
+private:
+    Float_t     fPos[3];        // Event vertex x,y,z
+    Float_t     fNmom[3];       //momentum of negative charged particle
+    Float_t     fPmom[3];       //momentum of positive charged particle    
+    Float_t     fEffMass;
+
+    Int_t       fNidx;          // index of the negative daughter
+    Int_t       fPidx;          // index of the positive daughter
+
+    
+    Bool_t      fOnFlyStatus;   // if kTRUE, then this V0 is recontructed
+                            // "on fly" during the tracking
+
+public:
+    Ali_AS_V0() :
+        fOnFlyStatus(kFALSE),fEffMass(0),fNidx(0),fPidx(0)
+        {
+            for (Int_t i=0; i<3; i++) {
+                fPos[i] = 0.;
+                fNmom[i] = 0.;
+                fPmom[i] = 0.;
+            }
+        }
+
+    Ali_AS_V0(const Float_t *pos, const Float_t *nmom, const Float_t *pmom, const Bool_t onflystatus, const Float_t effmass, Int_t i1, Int_t i2  ) :
+        fOnFlyStatus(onflystatus),fEffMass(effmass),fNidx(i1),fPidx(i2) 
+        {
+            for (Int_t i=0; i<3; i++) {
+                fPos[i] = pos[i];
+                fNmom[i] = nmom[i];
+                fPmom[i] = pmom[i];
+            }
+
+        }
+	
+    ~Ali_AS_V0(){}
+
+    virtual Float_t Px() const { return fNmom[0]+fPmom[0]; }
+    virtual Float_t Py() const { return fNmom[1]+fPmom[1]; }
+    virtual Float_t Pz() const { return fNmom[2]+fPmom[2]; }
+    virtual Float_t Pt() const { return TMath::Sqrt(Px()*Px()+Py()*Py()); }
+    virtual Float_t P()  const { 
+        return TMath::Sqrt(Px()*Px()+Py()*Py()+Pz()*Pz()); 
+    }
+    virtual Bool_t   PxPyPz(Float_t p[3]) const { p[0] = Px(); p[1] = Py(); p[2] = Pz(); return kTRUE; }
+    virtual Float_t Xv() const { return fPos[0]; }
+    virtual Float_t Yv() const { return fPos[1]; }
+    virtual Float_t Zv() const { return fPos[2]; }
+    virtual Bool_t   XvYvZv(Float_t x[3]) const { x[0] = Xv(); x[1] = Yv(); x[2] = Zv(); return kTRUE; }
+    virtual Float_t OneOverPt() const { return (Pt() != 0.) ? 1./Pt() : -999.; }
+    virtual Float_t Phi() const {return TMath::Pi()+TMath::ATan2(-Py(),-Px()); }
+    virtual Float_t Theta() const {return 0.5*TMath::Pi()-TMath::ATan(Pz()/(Pt()+1.e-13)); }
+    virtual Float_t E() const; // default is KOs but can be changed via ChangeMassHypothesis (defined in the .cxx)
+    virtual Float_t M() const { return GetEffMass(); }
+    virtual Float_t Eta() const { return 0.5*TMath::Log((P()+Pz())/(P()-Pz()+1.e-13)); }
+    virtual Float_t Y() const;
+    virtual Short_t  Charge() const { return 0; }
+    virtual Int_t    GetLabel() const { return -1; }  // temporary
+    Float_t  GetEffMass() const {return fEffMass;}
+
+    void     GetPxPyPz(Float_t &px, Float_t &py, Float_t &pz) const;
+    void     GetNPxPyPz(Float_t &px, Float_t &py, Float_t &pz) const;
+    void     GetPPxPyPz(Float_t &px, Float_t &py, Float_t &pz) const;  
+    void     GetXYZ(Float_t &x, Float_t &y, Float_t &z) const;
+    Int_t    GetNindex() const {return fNidx;}
+    Int_t    GetPindex() const {return fPidx;}
+
+
+
+    void     SetOnFlyStatus(Bool_t status){fOnFlyStatus=status;}
+  
+
+    
+
+        //----------------------------
+
+    ClassDef(Ali_AS_V0,1);  // A simple event compiled of tracks
+};
+
+inline 
+void Ali_AS_V0::GetNPxPyPz(Float_t &px, Float_t &py, Float_t &pz) const {
+px=fNmom[0]; py=fNmom[1]; pz=fNmom[2];
+}
+
+inline 
+void Ali_AS_V0::GetPPxPyPz(Float_t &px, Float_t &py, Float_t &pz) const {
+px=fPmom[0]; py=fPmom[1]; pz=fPmom[2];
+}
+
+inline
+void Ali_AS_V0::GetPxPyPz(Float_t &px, Float_t &py, Float_t &pz) const {
+  //--------------------------------------------------------------------
+  // This function returns V0's momentum (global)
+  //--------------------------------------------------------------------
+  px=fNmom[0]+fPmom[0]; 
+  py=fNmom[1]+fPmom[1]; 
+  pz=fNmom[2]+fPmom[2]; 
+}
+
+inline
+void Ali_AS_V0::GetXYZ(Float_t &x, Float_t &y, Float_t &z) const {
+  //--------------------------------------------------------------------
+  // This function returns V0's position (global)
+  //--------------------------------------------------------------------
+  x=fPos[0]; 
+  y=fPos[1]; 
+  z=fPos[2]; 
+}
+//----------------------------------------------------------------------------------------
+class Ali_TRD_ST_Vertex_Info_Sexa_NN : public TObject
+{
+    private:
+    Long64_t       fEvent_number;
+    Float_t     fPos[3];        // Event vertex x,y,z
+    Float_t     fNmom[3];       //momentum of negative charged particle
+    Float_t     fPmom[3];       //momentum of positive charged particle    
+    Float_t     fEffMass;
+
+    Int_t       fNidx;          // index of the negative daughter
+    Int_t       fPidx;          // index of the positive daughter
+
+    Ali_TRD_ST_TPC_Track* PTrack;
+    Ali_TRD_ST_TPC_Track* NTrack;
+    
+    Bool_t      fOnFlyStatus;   // if kTRUE, then this V0 is recontructed
+                            // "on fly" during the tracking
+    public:
+
+     Ali_TRD_ST_Vertex_Info_Sexa_NN() :
+        fOnFlyStatus(kFALSE),fEffMass(0),fNidx(0),fPidx(0)
+        {
+            for (Int_t i=0; i<3; i++) {
+                fPos[i] = 0.;
+                fNmom[i] = 0.;
+                fPmom[i] = 0.;
+            }
+        }
+
+    Ali_TRD_ST_Vertex_Info_Sexa_NN(const Float_t *pos, const Float_t *nmom, const Float_t *pmom, const Bool_t onflystatus, const Float_t effmass, Int_t i1, Int_t i2  ) :
+        fOnFlyStatus(onflystatus),fEffMass(effmass),fNidx(i1),fPidx(i2) 
+        {
+            for (Int_t i=0; i<3; i++) {
+                fPos[i] = pos[i];
+                fNmom[i] = nmom[i];
+                fPmom[i] = pmom[i];
+            }
+
+        }
+	Ali_TRD_ST_Vertex_Info_Sexa_NN(const Ali_TRD_ST_Vertex_Info_Sexa_NN& V1)
+        {
+            fOnFlyStatus = V1.fOnFlyStatus;
+            fEffMass= V1.fEffMass;
+            fNidx = V1.fNidx;
+            fPidx = V1.fPidx;
+            PTrack = V1.PTrack;
+            NTrack = V1.NTrack;
+
+            for (Int_t i=0; i<3; i++) {
+                fPos[i] = V1.fPos[i];
+                fNmom[i] = V1.fNmom[i];
+                fPmom[i] = V1.fPmom[i];
+            }
+        }
+    //Ali_TRD_ST_Vertex_Info_Sexa_NN& operator=(const Ali_TRD_ST_Vertex_Info_Sexa_NN& V1){}
+
+    ~Ali_TRD_ST_Vertex_Info_Sexa_NN(){}
+
+    Float_t Px() const { return fNmom[0]+fPmom[0]; }
+    Float_t Py() const { return fNmom[1]+fPmom[1]; }
+    Float_t Pz() const { return fNmom[2]+fPmom[2]; }
+    Float_t Pt() const { return TMath::Sqrt(Px()*Px()+Py()*Py()); }
+    Float_t P()  const { 
+        return TMath::Sqrt(Px()*Px()+Py()*Py()+Pz()*Pz()); 
+    }
+    Bool_t   PxPyPz(Float_t p[3]) const { p[0] = Px(); p[1] = Py(); p[2] = Pz(); return kTRUE; }
+    Float_t Xv() const { return fPos[0]; }
+    Float_t Yv() const { return fPos[1]; }
+    Float_t Zv() const { return fPos[2]; }
+    Bool_t   XvYvZv(Float_t x[3]) const { x[0] = Xv(); x[1] = Yv(); x[2] = Zv(); return kTRUE; }
+    Float_t OneOverPt() const { return (Pt() != 0.) ? 1./Pt() : -999.; }
+    Float_t Phi() const {return TMath::Pi()+TMath::ATan2(-Py(),-Px()); }
+    Float_t Theta() const {return 0.5*TMath::Pi()-TMath::ATan(Pz()/(Pt()+1.e-13)); }
+    Float_t E() const; // default is KOs but can be changed via ChangeMassHypothesis (defined in the .cxx)
+    Float_t M() const { return GetEffMass(); }
+    Float_t Eta() const { return 0.5*TMath::Log((P()+Pz())/(P()-Pz()+1.e-13)); }
+    Float_t Y() const;
+    Short_t  Charge() const { return 0; }
+    Int_t    GetLabel() const { return -1; }  // temporary
+    Float_t  GetEffMass() const {return fEffMass;}
+
+    void     GetPxPyPz(Float_t &px, Float_t &py, Float_t &pz) const;
+    void     GetNPxPyPz(Float_t &px, Float_t &py, Float_t &pz) const;
+    void     GetPPxPyPz(Float_t &px, Float_t &py, Float_t &pz) const;  
+    void     GetXYZ(Float_t &x, Float_t &y, Float_t &z) const;
+    Int_t    GetNindex() const {return fNidx;}
+    Int_t    GetPindex() const {return fPidx;}
+    Int_t    GetEventNumber() const {return fEvent_number;}
+    
+
+
+    void     SetOnFlyStatus(Bool_t status){fOnFlyStatus=status;}
+    void     SetPos(Float_t x[3]){fPos[0] = x[0];fPos[1] = x[1];fPos[2] = x[2];}
+    void     SetNMom(Float_t p[3]){fNmom[0] = p[0];fNmom[1] = p[1];fNmom[2] = p[2];}
+    void     SetPMom(Float_t p[3]){fPmom[0] = p[0];fPmom[1] = p[1];fPmom[2] = p[2];}
+    void     SetNidx(Int_t idx){fNidx = idx;}
+    void     SetPidx(Int_t idx){fPidx = idx;}
+    void     SetEventNumber(Long64_t idx){fEvent_number = idx;}
+    void     SetEffMass(Float_t effmass){fEffMass = effmass;}
+    void     SetPtrack(Ali_TRD_ST_TPC_Track* track){PTrack = track;}
+    void     SetNtrack(Ali_TRD_ST_TPC_Track* track){NTrack = track;}
+    
+    ClassDef(Ali_TRD_ST_Vertex_Info_Sexa_NN, 1); 
+};
+
+
+inline 
+void Ali_TRD_ST_Vertex_Info_Sexa_NN::GetNPxPyPz(Float_t &px, Float_t &py, Float_t &pz) const {
+px=fNmom[0]; py=fNmom[1]; pz=fNmom[2];
+}
+
+inline 
+void Ali_TRD_ST_Vertex_Info_Sexa_NN::GetPPxPyPz(Float_t &px, Float_t &py, Float_t &pz) const {
+px=fPmom[0]; py=fPmom[1]; pz=fPmom[2];
+}
+
+inline
+void Ali_TRD_ST_Vertex_Info_Sexa_NN::GetPxPyPz(Float_t &px, Float_t &py, Float_t &pz) const {
+  //--------------------------------------------------------------------
+  // This function returns V0's momentum (global)
+  //--------------------------------------------------------------------
+  px=fNmom[0]+fPmom[0]; 
+  py=fNmom[1]+fPmom[1]; 
+  pz=fNmom[2]+fPmom[2]; 
+}
+
+inline
+void Ali_TRD_ST_Vertex_Info_Sexa_NN::GetXYZ(Float_t &x, Float_t &y, Float_t &z) const {
+  //--------------------------------------------------------------------
+  // This function returns V0's position (global)
+  //--------------------------------------------------------------------
+  x=fPos[0]; 
+  y=fPos[1]; 
+  z=fPos[2]; 
+}
+//----------------------------------------------------------------------------------------
 
 
 

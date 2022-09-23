@@ -132,6 +132,12 @@ private:
     TTree* Tree_Input_GNN_sign;
 
 
+    //Tree for saving input and class member of TPC_track with adjacent TRD-tracklets (background)
+    Ali_TRD_ST_Vertex_Info_Sexa_NN* Vertex_Info_NN;
+    TTree* Tree_Input_NN_Sexa_bckgr;
+    TTree* Tree_Input_NN_Sexa_sign;
+    vector<vector<Ali_TRD_ST_Vertex_Info_Sexa_NN*>> MC_vertices;
+
     TH2D* TH2D_AP_plot;
     const Int_t N_AP_radii = 20;
     const Int_t N_pT_resolution = 7;
@@ -292,6 +298,10 @@ private:
     TH1D* h1D_invariant_mass_K_reconstructed;     //histogram for plotting the invariant mass of the K particle
     TH2D* h2d_invariant_mass_vs_R_Lambda;
 
+    TH1D* h1D_V0_R_Lambda_Sign;     //histogram for plotting the invariant mass of the S particle     
+    TH1D* h1D_V0_R_Lambda_Back;     //histogram for plotting the invariant mass of the L particle 
+    TH1D* h1D_V0_R_Lambda_SignAndBack;     //histogram for plotting the invariant mass of the K particle
+    
     TH1D* h2d_reconstruction_eff_vs_momentum;
     TH1D* h2d_total_rec_vs_momentum;
     
@@ -314,11 +324,13 @@ public:
     void Init_tree(TString SEList);
     Int_t Loop_event(Long64_t i_event, Int_t graphics);
     void Scan_MC_Event(Int_t graphics, Int_t bool_make_invariant_mass_hist);
+    void Draw_Count_vs_V0Lambda_histogram();
     void Draw_Inv_Mass_histogram();
+    void Write_Sexaquark_data_to_Tree(Long64_t iEvent);
 
     Int_t Draw_event(Long64_t i_event, Int_t graphics, Int_t draw_tracks, Int_t draw_tracklets, Double_t track_path, Int_t draw_digits);
     vector<Double_t> Get_Helix_params_from_kine(TLorentzVector TLV_particle, TVector3 TV3_vertex, Double_t charge);
-    void Draw_MC_event(Long64_t i_event, Int_t graphics);
+    void Draw_MC_event(Long64_t i_event, Int_t graphics, Bool_t draw_only_S_quark);
     void Draw_MC_event_2(Long64_t i_event, Int_t graphics);
 
     //---------------------------------------------------------------------------
@@ -372,8 +384,10 @@ public:
     Bool_t MCComesFromSexaquark(Ali_MC_particle * mcPart);
     void Match_TPC_to_MC_Data();
     void Match_TPC_to_MC_Data_MC();
-    void Check_possible_reconstruction(Int_t calc_reconstuction_efficiency_up_to_layer, Int_t event);
+    void Check_possible_reconstruction(Int_t calc_reconstuction_efficiency_up_to_layer, Int_t event, Bool_t bool_make_V0_R_hist);
     void Count_reconstruction_efficiency();
+    void find_V0_pairs();
+
 
     TH1D* get_layer_radii_hist() {return h_layer_radii_det;}
     Long64_t get_N_Events() {return N_Events;}
@@ -386,6 +400,8 @@ public:
     void hists_pv_dca();
     void Draw_n_Save_hists_pv_dca(TString out_dir, TString out_file_name_calib);
     Float_t primary_vertex_dca(Int_t i_track);
+    Float_t two_lines_dca(TVector3 pos1, TVector3 dir1,  TVector3 pos2, TVector3 dir2, TVector3* P1, TVector3* P2);
+
     //static Double_t distance_circ_point_2D(Double_t x,Double_t y,Double_t *p);
     //static void sum_distance_circ_point_2D(Int_t &, Double_t *, Double_t & sum, Double_t * par, Int_t );
     TProfile* Calibrate_gain(Long64_t i_event, Int_t Bethe_flag);
